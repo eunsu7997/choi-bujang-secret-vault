@@ -13,9 +13,9 @@ for (const method of ['GET','POST','PATCH','DELETE','HEAD','OPTIONS']) {
     assert.equal(accessed,false);
   });
 }
-test('B-1 deployment keeps production writes disabled', async () => {
+test('B-3 deployment enables only student writes', async () => {
   const source=await readFile(new URL('../api/notes.js',import.meta.url),'utf8');
-  assert.match(source.slice(source.indexOf('export default createNotesHandler')),/writesEnabled: false/u);
+  assert.match(source.slice(source.indexOf('export default createNotesHandler')),/writesEnabled: 'students-only'/u);
 });
 test('B-1 deployment never reads a write-enable environment switch', async () => {
   const source=await readFile(new URL('../api/notes.js',import.meta.url),'utf8');

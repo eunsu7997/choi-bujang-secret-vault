@@ -139,7 +139,10 @@ export function createNotesHandler({ getVerifier, getStore, writesEnabled = fals
       return response.status(401).json({ error: 'UNAUTHORIZED' });
     }
 
-    if (method !== 'GET' && !writesEnabled) {
+    // Explicit modes only: production enables students while judge writes remain gated.
+    const mayWrite = writesEnabled === true
+      || (writesEnabled === 'students-only' && owner.kind === 'student');
+    if (method !== 'GET' && !mayWrite) {
       return response.status(403).json({ error: 'WRITES_DISABLED' });
     }
 
@@ -186,6 +189,7 @@ export default createNotesHandler({
     const client = supabaseFromEnv();
     return client && supabaseNotesStore(client);
   },
-  // 소유권 SQL 적용과 실제 DB 검증 전까지 실제 DB 쓰기는 켜지 않습니다.
-  writesEnabled: false,
+  // Actual student JWT isolation and genuine expiration were verified before this release.
+  // Official judge authentication remains unverified; retain its write gate.
+  writesEnabled: 'students-only',
 });
