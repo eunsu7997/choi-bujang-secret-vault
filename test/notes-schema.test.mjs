@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
@@ -21,11 +22,18 @@ test('notes schema enables RLS and blocks anon/authenticated', async () => {
   assert.doesNotMatch(sql, /create policy|grant /iu);
 });
 
-test('local seed matches public sample notes and stays out of Git', async () => {
+// data.json과 시드는 로컬 전용이라 새 클론에는 없습니다. 있을 때만 대조합니다.
+const localOnly = ['data.json', 'supabase/seed.local.sql'].every((path) => existsSync(new URL(`../${path}`, import.meta.url)));
+
+test('local seed matches local sample notes', { skip: !localOnly && '로컬 전용 파일 없음' }, async () => {
   const { notes } = JSON.parse(await read('data.json'));
   const seed = await read('supabase/seed.local.sql');
   for (const note of notes) assert.ok(seed.includes(`('${note.title}', '${note.content}')`), note.title);
+});
+
+test('local-only seed, sample data, and bundle notes stay out of Git', () => {
   const cwd = new URL('..', import.meta.url);
-  assert.equal(execFileSync('git', ['check-ignore', 'supabase/seed.local.sql'], { cwd, encoding: 'utf8' }).trim(),
-    'supabase/seed.local.sql');
+  const paths = ['supabase/seed.local.sql', 'data.json', 'bundle-notes.json'];
+  assert.deepEqual(execFileSync('git', ['check-ignore', ...paths], { cwd, encoding: 'utf8' }).trim().split(/\r?\n/u), paths);
+  assert.equal(execFileSync('git', ['ls-files', '--', ...paths], { cwd, encoding: 'utf8' }), '');
 });
