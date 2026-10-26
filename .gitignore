@@ -6,3 +6,5 @@ node_modules/
 public/aleph.json
 supabase/*.local.sql
 data.json
+public/auth-config.json
+public/vendor/

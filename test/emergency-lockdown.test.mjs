@@ -1,36 +1,23 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
-import handler from '../api/notes.js';
+import { createNotesHandler } from '../api/notes.js';
 
-for (const method of ['GET', 'POST', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']) {
-  test(`maintenance gate refuses ${method} without inspecting request data`, () => {
-    const headers = new Map();
-    let status;
-    let body;
-    const request = new Proxy({}, { get() { throw new Error('Request contents must not be read'); } });
-    handler(request, {
-      setHeader: (key, value) => headers.set(key, value),
-      status(code) { status = code; return { json(value) { body = value; } }; },
-    });
-    assert.equal(status, 503);
-    assert.deepEqual(body, { error: 'NOTES_TEMPORARILY_UNAVAILABLE' });
-    assert.equal(headers.get('Cache-Control'), 'no-store, max-age=0');
-    assert.equal(headers.get('Retry-After'), '3600');
+// The parent commit's unconditional maintenance gate is replaced by authenticated read-only service.
+for (const method of ['GET','POST','PATCH','DELETE','HEAD','OPTIONS']) {
+  test(`auth release refuses unauthenticated ${method} before store access`, async () => {
+    let status; let accessed = false;
+    const handler = createNotesHandler({getVerifier:()=>async()=>null,getStore:()=>{accessed=true;throw Error('store');}});
+    await handler({method,headers:{}},{setHeader(){},status(value){status=value;return {json(){}};}});
+    assert.equal(status, ['HEAD','OPTIONS'].includes(method)?405:401);
+    assert.equal(accessed,false);
   });
 }
-
-test('gate cannot read credentials, authenticate, fetch or access the database', async () => {
-  const source = await readFile(new URL('../api/notes.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(source, /\bimport\b|process\.env|\bfetch\s*\(|createClient|\.from\s*\(|\.select\s*\(/u);
+test('B-1 deployment keeps production writes disabled', async () => {
+  const source=await readFile(new URL('../api/notes.js',import.meta.url),'utf8');
+  assert.match(source.slice(source.indexOf('export default createNotesHandler')),/writesEnabled: false/u);
 });
-
-test('maintenance response is independent of supplied credentials and query IDs', () => {
-  for (const headers of [{}, { authorization: 'Bearer synthetic-invalid' }]) {
-    let result;
-    handler({ method: 'GET', headers, query: { id: 'synthetic' } }, {
-      setHeader() {}, status(code) { return { json(body) { result = { code, body }; } }; },
-    });
-    assert.deepEqual(result, { code: 503, body: { error: 'NOTES_TEMPORARILY_UNAVAILABLE' } });
-  }
+test('B-1 deployment never reads a write-enable environment switch', async () => {
+  const source=await readFile(new URL('../api/notes.js',import.meta.url),'utf8');
+  assert.doesNotMatch(source,/process\.env\.[A-Z_]*WRITE/u);
 });
