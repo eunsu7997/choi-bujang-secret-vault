@@ -94,7 +94,7 @@
 
     async function notesApi(method, { id, body } = {}) {
       if (!currentSession) throw new Error(WRITE_MESSAGES[401]);
-      const response = await fetch(id ? `/api/notes?id=${encodeURIComponent(id)}` : '/api/notes', {
+      const response = await fetch(id ? `/api/notes/${encodeURIComponent(id)}` : '/api/notes', {
         method, cache: 'no-store',
         headers: { Authorization: `Bearer ${currentSession.access_token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
         body: body ? JSON.stringify(body) : undefined,
@@ -124,7 +124,7 @@
       const edit = document.createElement('button');
       const remove = document.createElement('button');
       title.textContent = note.title;
-      content.textContent = note.content;
+      content.textContent = note.body;
       actions.className = 'actions';
       edit.type = remove.type = 'button';
       edit.textContent = '수정';
@@ -134,7 +134,7 @@
         noteSubmit.disabled = false;
         editingId = note.id;
         noteTitle.value = note.title;
-        noteContent.value = note.content;
+        noteContent.value = note.body;
         noteSubmit.textContent = '수정 저장';
         noteCancel.hidden = false;
         noteStatus.textContent = '';
@@ -190,9 +190,9 @@
         const data = await response.json();
         if (turn !== renderTurn) return;
         if (requestTurn !== loadTurn) return;
-        if (!Array.isArray(data.notes)) throw new Error('자료 형식이 맞지 않습니다.');
-        if (!data.notes.length) showMessage('아직 메모가 없습니다.');
-        else list.replaceChildren(...data.notes.map(noteItem));
+        if (!Array.isArray(data)) throw new Error('자료 형식이 맞지 않습니다.');
+        if (!data.length) showMessage('아직 메모가 없습니다.');
+        else list.replaceChildren(...data.map(noteItem));
       } catch (error) {
         if (turn === renderTurn && requestTurn === loadTurn) showMessage(error.message);
       }
@@ -247,12 +247,12 @@
       const gen = sessionGen;
       const seq = ++submitSeq;
       const wasEditing = Boolean(editingId);
-      const body = { title: noteTitle.value, content: noteContent.value };
+      const body = { title: noteTitle.value, body: noteContent.value };
       let message;
       let ok = false;
       let status;
       try {
-        if (wasEditing) await notesApi('PATCH', { id: editingId, body });
+        if (wasEditing) await notesApi('PUT', { id: editingId, body });
         else await notesApi('POST', { body });
         ok = true;
         message = wasEditing ? '메모를 수정했습니다.' : '메모를 추가했습니다.';

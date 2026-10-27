@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { createNotesHandler } from '../api/notes.js';
 
 // The parent commit's unconditional maintenance gate is replaced by authenticated read-only service.
-for (const method of ['GET','POST','PATCH','DELETE','HEAD','OPTIONS']) {
+for (const method of ['GET','POST','PUT','DELETE','HEAD','OPTIONS']) {
   test(`auth release refuses unauthenticated ${method} before store access`, async () => {
     let status; let accessed = false;
     const handler = createNotesHandler({getVerifier:()=>async()=>null,getStore:()=>{accessed=true;throw Error('store');}});

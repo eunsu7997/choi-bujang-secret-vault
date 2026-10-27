@@ -59,20 +59,20 @@ export async function runDbIntegration({ client, checkOnly, directRead, log = co
   const as = (who) => ({ authorization: `Bearer ${who}` });
 
   try {
-    const created = await call(handler, { method: 'POST', headers: as('a'), body: { title: 'db-integration', content: 'synthetic' } });
+    const created = await call(handler, { method: 'POST', headers: as('a'), body: { title: 'db-integration', body: 'synthetic' } });
     record('A 메모 생성', created.status === 201, `HTTP ${created.status}`);
-    const id = created.body?.note?.id;
+    const id = created.body?.id;
     if (!id) return;
     const ownList = await call(handler, { method: 'GET', headers: as('a') });
-    record('A 목록에 자기 메모만', ownList.status === 200 && ownList.body.notes.length === 1, `${ownList.body?.notes?.length}건`);
+    record('A 목록에 자기 메모만', ownList.status === 200 && ownList.body.length === 1, `${ownList.body?.length}건`);
     const otherList = await call(handler, { method: 'GET', headers: as('b') });
-    record('B 목록에 A 메모 없음', otherList.status === 200 && otherList.body.notes.length === 0, `${otherList.body?.notes?.length}건`);
-    for (const [who, method, body] of [['b', 'GET'], ['b', 'PATCH', { title: 'taken' }], ['b', 'DELETE'],
-      ['j', 'GET'], ['j', 'PATCH', { title: 'taken' }], ['j', 'DELETE']]) {
+    record('B 목록에 A 메모 없음', otherList.status === 200 && otherList.body.length === 0, `${otherList.body?.length}건`);
+    for (const [who, method, body] of [['b', 'GET'], ['b', 'PUT', { title: 'taken', body: '' }], ['b', 'DELETE'],
+      ['j', 'GET'], ['j', 'PUT', { title: 'taken', body: '' }], ['j', 'DELETE']]) {
       const result = await call(handler, { method, headers: as(who), query: { id }, body });
       record(`${who === 'b' ? '학생 B' : '같은 UUID 심판'} ${method} A 메모 거절`, result.status === 404, `HTTP ${result.status}`);
     }
-    const patched = await call(handler, { method: 'PATCH', headers: as('a'), query: { id }, body: { content: 'changed' } });
+    const patched = await call(handler, { method: 'PUT', headers: as('a'), query: { id }, body: { title: 'db-integration', body: 'changed' } });
     record('A 메모 수정', patched.status === 200, `HTTP ${patched.status}`);
     const removed = await call(handler, { method: 'DELETE', headers: as('a'), query: { id } });
     record('A 메모 삭제', removed.status === 204, `HTTP ${removed.status}`);

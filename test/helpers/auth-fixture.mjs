@@ -66,6 +66,7 @@ export function fakeSupabase(rows = [], { ignoreOwnerFilters = false, missingCol
       ? value.includes(row[column.slice(0, -3)]) : row[column] === value));
     let out;
     if (state.op === 'insert') {
+      if (rows.some(row => row.id === state.payload.id)) return { data: null, error: { code: '23505' } };
       const row = { id: randomUUID(), created_at: rows.length, ...state.payload };
       rows.push(row);
       out = [row];

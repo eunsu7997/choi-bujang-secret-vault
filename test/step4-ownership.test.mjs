@@ -16,9 +16,9 @@ function setup() {
   return { db, handler };
 }
 async function createAs(handler, authorization, title) {
-  const result = await call(handler, { method: 'POST', headers: { authorization }, body: { title, content: `${title} 내용` } });
+  const result = await call(handler, { method: 'POST', headers: { authorization }, body: { title, body: `${title} 내용` } });
   assert.equal(result.status, 201);
-  return result.body.note.id;
+  return result.body.id;
 }
 
 test('every read, update and delete query is scoped by owner_kind and owner_id', async () => {
@@ -27,7 +27,7 @@ test('every read, update and delete query is scoped by owner_kind and owner_id',
   const id = await createAs(handler, a.authorization, '시험 A');
   await call(handler, { method: 'GET', headers: a });
   await call(handler, { method: 'GET', headers: a, query: { id } });
-  await call(handler, { method: 'PATCH', headers: a, query: { id }, body: { content: '바뀜' } });
+  await call(handler, { method: 'PUT', headers: a, query: { id }, body: { title: '시험 A', body: '바뀜' } });
   await call(handler, { method: 'DELETE', headers: a, query: { id } });
   const scoped = db.calls.filter((item) => item.op !== 'insert');
   assert.equal(scoped.length, 4);
@@ -44,9 +44,9 @@ test('user B cannot list, read, update or delete user A notes, and learns nothin
   const id = await createAs(handler, a.authorization, '시험 A');
   const before = JSON.stringify(db.rows);
 
-  assert.deepEqual((await call(handler, { method: 'GET', headers: b })).body, { notes: [] });
+  assert.deepEqual((await call(handler, { method: 'GET', headers: b })).body, []);
   const missing = randomUUID();
-  for (const [method, body] of [['GET'], ['PATCH', { title: '탈취' }], ['DELETE']]) {
+  for (const [method, body] of [['GET'], ['PUT', { title: '탈취', body: '' }], ['DELETE']]) {
     const other = await call(handler, { method, headers: b, query: { id }, body });
     const none = await call(handler, { method, headers: b, query: { id: missing }, body });
     assert.deepEqual([other.status, other.body], [404, { error: 'NOTE_NOT_FOUND' }], method);
@@ -59,19 +59,19 @@ test('user B cannot list, read, update or delete user A notes, and learns nothin
   assert.equal(JSON.stringify(db.rows), before);
 
   const own = await call(handler, { method: 'GET', headers: a, query: { id: id.toUpperCase() } });
-  assert.deepEqual(own.body, { note: { id, title: '시험 A', content: '시험 A 내용' } });
+  assert.deepEqual(own.body, { id, title: '시험 A', body: '시험 A 내용' });
 });
 
 test('request bodies cannot choose or change the owner', async () => {
   const { db, handler } = setup();
   const b = { authorization: await studentBearer(userB) };
   const id = await createAs(handler, (await studentBearer(userA)), '시험 A');
-  for (const body of [{ title: '주입', owner_id: userB }, { title: '주입', owner_kind: 'judge' }, { title: '주입', id }]) {
+  for (const body of [{ title: '주입', body: '', owner_id: userB }, { title: '주입', body: '', owner_kind: 'judge' }, { title: '주입', body: '', id: 'invalid' }]) {
     const created = await call(handler, { method: 'POST', headers: b, body });
     assert.deepEqual([created.status, created.body], [400, { error: 'INVALID_NOTE' }]);
   }
   const mine = await createAs(handler, b.authorization, '시험 B');
-  const moved = await call(handler, { method: 'PATCH', headers: b, query: { id: mine }, body: { owner_id: userA } });
+  const moved = await call(handler, { method: 'PUT', headers: b, query: { id: mine }, body: { owner_id: userA } });
   assert.equal(moved.status, 400);
   assert.deepEqual(db.rows.map((row) => [row.id === id ? 'A' : 'B', row.owner_kind, row.owner_id]),
     [['A', 'student', userA], ['B', 'student', userB]]);
@@ -82,13 +82,13 @@ test('student and judge owners are separate even when the user ID is the same', 
   const studentNote = await createAs(handler, await studentBearer(userA), '학생 메모');
   // 심판 토큰의 sub가 학생 ID와 같아도 학생 메모에 닿지 않아야 합니다.
   const sameIdJudge = { authorization: await judgeBearer(userA, 'a') };
-  assert.deepEqual((await call(handler, { method: 'GET', headers: sameIdJudge })).body, { notes: [] });
+  assert.deepEqual((await call(handler, { method: 'GET', headers: sameIdJudge })).body, []);
   assert.equal((await call(handler, { method: 'GET', headers: sameIdJudge, query: { id: studentNote } })).status, 404);
   assert.equal((await call(handler, { method: 'DELETE', headers: sameIdJudge, query: { id: studentNote } })).status, 404);
   const judgeNote = await createAs(handler, sameIdJudge.authorization, '심판 메모');
   assert.deepEqual(db.rows.find((row) => row.id === judgeNote).owner_kind, 'judge');
   const studentView = await call(handler, { method: 'GET', headers: { authorization: await studentBearer(userA) } });
-  assert.deepEqual(studentView.body.notes.map((note) => note.id), [studentNote]);
+  assert.deepEqual(studentView.body.map((note) => note.id), [studentNote]);
 });
 
 test('judge identity a and identity b cannot touch each other notes', async () => {
@@ -96,12 +96,12 @@ test('judge identity a and identity b cannot touch each other notes', async () =
   const ja = { authorization: await judgeBearer(judgeA, 'a') };
   const jb = { authorization: await judgeBearer(judgeB, 'b') };
   const id = await createAs(handler, ja.authorization, '심판 a 메모');
-  assert.deepEqual((await call(handler, { method: 'GET', headers: jb })).body, { notes: [] });
-  for (const method of ['GET', 'PATCH', 'DELETE']) {
-    const result = await call(handler, { method, headers: jb, query: { id }, body: { title: '탈취' } });
+  assert.deepEqual((await call(handler, { method: 'GET', headers: jb })).body, []);
+  for (const method of ['GET', 'PUT', 'DELETE']) {
+    const result = await call(handler, { method, headers: jb, query: { id }, body: { title: '탈취', body: '' } });
     assert.equal(result.status, 404, method);
   }
-  assert.deepEqual((await call(handler, { method: 'GET', headers: ja })).body.notes.map((note) => note.id), [id]);
+  assert.deepEqual((await call(handler, { method: 'GET', headers: ja })).body.map((note) => note.id), [id]);
 });
 
 test('responses never carry owner fields', async () => {
@@ -109,7 +109,7 @@ test('responses never carry owner fields', async () => {
   const a = { authorization: await studentBearer(userA) };
   const id = await createAs(handler, a.authorization, '시험 A');
   for (const request of [{ method: 'GET' }, { method: 'GET', query: { id } },
-    { method: 'PATCH', query: { id }, body: { title: '시험 A2' } }]) {
+    { method: 'PUT', query: { id }, body: { title: '시험 A2', body: '' } }]) {
     const result = await call(handler, { headers: a, ...request });
     assert.doesNotMatch(JSON.stringify(result.body), /owner_|created_at/u);
   }
@@ -145,8 +145,8 @@ test('query arrays, lists and padded ids cannot widen access to another user not
   const before = JSON.stringify(db.rows);
   for (const query of [{ id: [id] }, { id: [mine, id] }, { id: `${mine},${id}` }, { id: ` ${id}` },
     { id: `${id}%00` }, { id: `in.(${id})` }, { id: '*' }, { id: '' }]) {
-    for (const method of ['GET', 'PATCH', 'DELETE']) {
-      const result = await call(handler, { method, headers: b, query, body: { title: '탈취' } });
+    for (const method of ['GET', 'PUT', 'DELETE']) {
+      const result = await call(handler, { method, headers: b, query, body: { title: '탈취', body: '' } });
       assert.deepEqual([result.status, result.body], [400, { error: 'INVALID_NOTE_ID' }], `${method} ${JSON.stringify(query)}`);
     }
   }

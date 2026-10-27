@@ -129,8 +129,8 @@ function memoryStore() {
     rows,
     async list(owner) { return [...rows.values()].filter((row) => owns(owner, row)); },
     async get(owner, id) { return owns(owner, rows.get(id)) ? rows.get(id) : null; },
-    async create(owner, { title, content }) {
-      const row = { id: randomUUID(), owner_kind: owner.kind, owner_id: owner.id, title, content };
+    async create(owner, { id, title, content }) {
+      const row = { id, owner_kind: owner.kind, owner_id: owner.id, title, content };
       rows.set(row.id, row);
       return row;
     },
@@ -164,9 +164,9 @@ test('unauthenticated, forged and expired requests are refused for every method 
   const forged = await studentToken({}, { key: attackerKeys.privateKey });
   const expired = await studentToken({ iat: now() - 7200, exp: now() - 3600 });
   for (const authorization of [undefined, bearer(forged), bearer(expired), 'Bearer not.a.jwt']) {
-    for (const method of ['GET', 'POST', 'PATCH', 'DELETE']) {
+    for (const method of ['GET', 'POST', 'PUT', 'DELETE']) {
       const result = await call(handler, { method, headers: { authorization },
-        query: { id: randomUUID() }, body: { title: '시험', content: '시험' } });
+        query: { id: randomUUID() }, body: { title: '시험', body: '시험' } });
       assert.deepEqual([result.status, result.body], [401, { error: 'UNAUTHORIZED' }], `${method}`);
       assert.equal(result.headers.get('www-authenticate'), 'Bearer');
       assert.equal(result.headers.get('cache-control'), 'no-store');
@@ -181,18 +181,18 @@ test('CRUD works in the isolated mock store with a verified student token', asyn
   const handler = createNotesHandler({ getVerifier: () => verify, getStore: () => store, writesEnabled: true });
   const headers = { authorization: bearer(await studentToken()) };
 
-  const created = await call(handler, { method: 'POST', headers, body: { title: '  시험 제목  ', content: '시험 내용' } });
+  const created = await call(handler, { method: 'POST', headers, body: { title: '  시험 제목  ', body: '시험 내용' } });
   assert.equal(created.status, 201);
-  assert.deepEqual(Object.keys(created.body.note).sort(), ['content', 'id', 'title']);
-  assert.equal(created.body.note.title, '시험 제목');
-  const id = created.body.note.id;
+  assert.deepEqual(Object.keys(created.body).sort(), ['id']);
+  assert.equal(store.rows.get(created.body.id).title, '시험 제목');
+  const id = created.body.id;
   assert.equal(store.rows.get(id).owner_id, userA);
 
   const listed = await call(handler, { method: 'GET', headers });
-  assert.deepEqual(listed.body.notes, [{ id, title: '시험 제목', content: '시험 내용' }]);
+  assert.deepEqual(listed.body, [{ id, title: '시험 제목', body: '시험 내용' }]);
 
-  const patched = await call(handler, { method: 'PATCH', headers, query: { id }, body: { content: '바뀐 내용' } });
-  assert.deepEqual([patched.status, patched.body.note.content], [200, '바뀐 내용']);
+  const patched = await call(handler, { method: 'PUT', headers, query: { id }, body: { title: '시험 제목', body: '바뀐 내용' } });
+  assert.deepEqual([patched.status, patched.body.body], [200, '바뀐 내용']);
 
   const removed = await call(handler, { method: 'DELETE', headers, query: { id } });
   assert.equal(removed.status, 204);
@@ -206,7 +206,7 @@ test('CRUD rejects invalid input without writing', async () => {
   const handler = createNotesHandler({ getVerifier: () => verify, getStore: () => store, writesEnabled: true });
   const headers = { authorization: bearer(await studentToken()) };
   for (const body of [undefined, [], { title: '' }, { title: '   ' }, { title: 'a'.repeat(201) },
-    { title: '시험', content: 'a'.repeat(10001) }, { title: '시험', owner_id: userA }, { title: 1 }]) {
+    { title: '시험', body: 'a'.repeat(10001) }, { title: '시험', owner_id: userA }, { title: 1 }]) {
     const result = await call(handler, { method: 'POST', headers, body });
     assert.deepEqual([result.status, result.body], [400, { error: 'INVALID_NOTE' }], JSON.stringify(body)?.slice(0, 30));
   }
@@ -221,7 +221,7 @@ test('factory defaults remain read-only and production explicitly enables only s
   const store = memoryStore();
   const handler = createNotesHandler({ getVerifier: () => verify, getStore: () => store });
   const headers = { authorization: bearer(await studentToken()) };
-  for (const method of ['POST', 'PATCH', 'DELETE']) {
+  for (const method of ['POST', 'PUT', 'DELETE']) {
     const result = await call(handler, { method, headers, query: { id: randomUUID() }, body: { title: '시험' } });
     assert.deepEqual([result.status, result.body], [403, { error: 'WRITES_DISABLED' }], method);
   }

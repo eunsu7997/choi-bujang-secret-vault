@@ -126,11 +126,11 @@ async function thirdStepChecks(config, app) {
       statusOnly(send({ headers: { authorization: `Bearer ${await forgedToken('https://login.other-service.example/auth/v1', audience)}` } }))),
     await observe('anonymous_write_blocked', `비로그인 POST ${route} 요청이 401로 거절됨`, async () =>
       statusOnly(send({ method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ title: 'attack-check', content: '' }) }))),
+        body: JSON.stringify({ title: 'attack-check', body: '' }) }))),
     // 학생 로그인 토큰은 자동 점검에 넣지 않으므로 실행하지 않은 점검으로 남깁니다.
     { attackId: 'student_login_read', expected: `학생 로그인 토큰의 GET ${route} 요청이 200`,
       observed: '미실행 (로그인 토큰이 필요해 자동 점검하지 않음, 브라우저에서 직접 확인)' },
-    { attackId: 'cross_owner_access', expected: `학생 B 토큰으로 학생 A 메모의 GET·PATCH·DELETE ${route}?id= 요청이 404`,
+    { attackId: 'cross_owner_access', expected: `학생 B 토큰으로 학생 A 메모의 GET·PUT·DELETE ${route}/:id 요청이 404`,
       observed: '미실행 (두 계정의 로그인 토큰이 필요해 자동 점검하지 않음)' },
     await checkIdentity(config, app),
   ];

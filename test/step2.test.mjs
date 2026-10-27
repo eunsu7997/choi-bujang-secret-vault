@@ -42,7 +42,7 @@ function fakeClient(result, seen = {}) {
   };
 }
 
-test('notes API returns only id, title and content from the server query', async () => {
+test('notes API maps internal content to public body from the server query', async () => {
   const seen = {};
   const rows = [
     { id: 'a1', title: '시험 제목 A', content: '시험 내용 A', owner_id: '00000000-0000-0000-0000-000000000000' },
@@ -55,13 +55,13 @@ test('notes API returns only id, title and content from the server query', async
   assert.equal(seen.table, 'notes');
   assert.equal(seen.columns, 'id, title, content');
   assert.deepEqual(seen.filters, [['owner_kind', 'student'], ['owner_id', '11111111-1111-4111-8111-111111111111']]);
-  assert.deepEqual(body.notes, rows.map(({ id, title, content }) => ({ id, title, content })));
+  assert.deepEqual(body, rows.map(({ id, title, content }) => ({ id, title, body: content })));
 });
 
 test('notes API rejects other methods and missing configuration without echoing values', async () => {
-  const put = await call(handlerWith(fakeClient({ data: [], error: null })), { method: 'PUT', headers: {} });
+  const put = await call(handlerWith(fakeClient({ data: [], error: null })), { method: 'PATCH', headers: {} });
   assert.equal(put.status, 405);
-  assert.equal(put.headers.get('allow'), 'GET, POST, PATCH, DELETE');
+  assert.equal(put.headers.get('allow'), 'GET, POST, PUT, DELETE');
   const missing = await call(handlerWith(null), { method: 'GET', headers: {} });
   assert.deepEqual([missing.status, missing.body], [500, { error: 'NOTES_NOT_CONFIGURED' }]);
   assert.equal(supabaseFromEnv({}, testConfig), null);

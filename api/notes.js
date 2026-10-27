@@ -3,11 +3,12 @@
 import { createRequire } from 'node:module';
 import { createClient } from '@supabase/supabase-js';
 import { createLoginVerifier } from '../src/verify-login.mjs';
+import { createFields, putFields, publicNote, noteRoute } from '../src/notes-contract.mjs';
 
 const appConfig = createRequire(import.meta.url)('../aleph.config.json');
 const MAX_NOTES = 50;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
-const ALLOWED_METHODS = 'GET, POST, PATCH, DELETE';
+const ALLOWED_METHODS = 'GET, POST, PUT, DELETE';
 let cachedClient;
 let cachedVerifier;
 
@@ -67,8 +68,8 @@ export function supabaseNotesStore(client) {
     async get(owner, id) {
       return checked(await mine(notes().select('id, title, content').eq('id', id), owner).maybeSingle());
     },
-    async create(owner, { title, content }) {
-      return checked(await notes().insert({ owner_kind: owner.kind, owner_id: owner.id, title, content })
+    async create(owner, { id, title, content }) {
+      return checked(await notes().insert({ id, owner_kind: owner.kind, owner_id: owner.id, title, content })
         .select('id, title, content').single());
     },
     async update(owner, id, fields) {
@@ -92,38 +93,12 @@ function ownerOf(principal) {
 // 남의 메모와 없는 메모를 구분할 수 없도록 같은 응답을 씁니다.
 const notFound = (response) => response.status(404).json({ error: 'NOTE_NOT_FOUND' });
 
-// 응답에는 화면에 필요한 값만 내보내고 owner_id·owner_kind는 숨깁니다.
-const publicNote = ({ id, title, content }) => ({ id, title, content });
-
-function noteFields(body, { partial }) {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
-  const fields = {};
-  if (body.title !== undefined || !partial) {
-    if (typeof body.title !== 'string') return null;
-    const title = body.title.trim();
-    if (title.length < 1 || title.length > 200) return null;
-    fields.title = title;
-  }
-  if (body.content !== undefined || !partial) {
-    const content = body.content ?? '';
-    if (typeof content !== 'string' || content.length > 10000) return null;
-    fields.content = content;
-  }
-  if (Object.keys(body).some((key) => !['title', 'content'].includes(key))) return null;
-  return Object.keys(fields).length ? fields : null;
-}
-
-function noteId(request) {
-  const id = request.query?.id;
-  return typeof id === 'string' && UUID.test(id) ? id.toLowerCase() : null;
-}
-
 export function createNotesHandler({ getVerifier, getStore, writesEnabled = false }) {
   if (typeof getVerifier !== 'function' || typeof getStore !== 'function') throw new TypeError('invalid_notes_handler');
   return async function handler(request, response) {
     response.setHeader('Cache-Control', 'no-store');
     const method = request.method;
-    if (!['GET', 'POST', 'PATCH', 'DELETE'].includes(method)) {
+    if (!['GET', 'POST', 'PUT', 'DELETE'].includes(method)) {
       response.setHeader('Allow', ALLOWED_METHODS);
       return response.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
     }
@@ -146,36 +121,47 @@ export function createNotesHandler({ getVerifier, getStore, writesEnabled = fals
       return response.status(403).json({ error: 'WRITES_DISABLED' });
     }
 
+    const route = noteRoute(request);
+    if (route.invalid || (['PUT', 'DELETE'].includes(method) && !route.isItem)) {
+      return response.status(400).json({ error: 'INVALID_NOTE_ID' });
+    }
+    if (method === 'POST' && route.isItem) {
+      response.setHeader('Allow', 'GET, PUT, DELETE');
+      return response.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
+    }
+    const fields = method === 'POST' ? createFields(request.body)
+      : method === 'PUT' ? putFields(request.body) : null;
+    if (['POST', 'PUT'].includes(method) && !fields) {
+      return response.status(400).json({ error: 'INVALID_NOTE' });
+    }
+
     // 저장소는 로그인 확인을 통과한 뒤에만 준비합니다.
     let store = null;
     try { store = getStore(); } catch { store = null; }
     if (!store) return response.status(500).json({ error: 'NOTES_NOT_CONFIGURED' });
 
     try {
-      if (method === 'GET' && request.query?.id === undefined) {
-        return response.status(200).json({ notes: (await store.list(owner)).map(publicNote) });
+      if (method === 'GET' && !route.isItem) {
+        return response.status(200).json((await store.list(owner)).map(publicNote));
       }
       if (method === 'POST') {
-        const fields = noteFields(request.body, { partial: false });
-        if (!fields) return response.status(400).json({ error: 'INVALID_NOTE' });
         // 소유자는 요청 본문이 아니라 검증된 토큰에서만 정합니다.
-        return response.status(201).json({ note: publicNote(await store.create(owner, fields)) });
+        const created = await store.create(owner, fields);
+        return response.status(201).json({ id: created.id });
       }
-      const id = noteId(request);
-      if (!id) return response.status(400).json({ error: 'INVALID_NOTE_ID' });
+      const id = route.id;
       if (method === 'GET') {
         const note = await store.get(owner, id);
-        return note ? response.status(200).json({ note: publicNote(note) }) : notFound(response);
+        return note ? response.status(200).json(publicNote(note)) : notFound(response);
       }
-      if (method === 'PATCH') {
-        const fields = noteFields(request.body, { partial: true });
-        if (!fields) return response.status(400).json({ error: 'INVALID_NOTE' });
+      if (method === 'PUT') {
         const note = await store.update(owner, id, fields);
-        return note ? response.status(200).json({ note: publicNote(note) }) : notFound(response);
+        return note ? response.status(200).json(publicNote(note)) : notFound(response);
       }
       const removed = await store.remove(owner, id);
       return removed ? response.status(204).end() : notFound(response);
     } catch (error) {
+      if (error?.code === '23505') return response.status(409).json({ error: 'NOTE_ID_CONFLICT' });
       // 오류 코드만 남기고 키·주소·토큰·메모 본문은 기록하지 않습니다.
       console.error('notes_query_failed', typeof error?.code === 'string' ? error.code : 'unknown');
       return response.status(502).json({ error: 'NOTES_UNAVAILABLE' });

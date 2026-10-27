@@ -42,7 +42,7 @@ async function page() {
   const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
   const session = id => ({ user: { id }, access_token: 'synthetic-' + id });
   const auth = async id => { listener('CHANGED', id ? session(id) : null); while (timers.length) timers.shift()(); await flush(); };
-  const reply = async (request, notes = [], status = 200) => { request.resolve({ ok: status < 400, status, json: async () => ({ notes }) }); await flush(); };
+  const reply = async (request, notes = [], status = 200) => { request.resolve({ ok: status < 400, status, json: async () => notes }); await flush(); };
   const list = () => get('#notes');
   return { get, pending, auth, reply, flush, list, failLogin: () => { failLogin = true; } };
 }
@@ -50,14 +50,14 @@ async function page() {
 test('account switch immediately clears prior memo text and ignores the prior account response', async () => {
   const p = await page();
   await p.auth('A'); const first = p.pending.at(-1);
-  await p.reply(first, [{ id: 'a', title: 'A private', content: 'A body' }]);
+  await p.reply(first, [{ id: 'a', title: 'A private', body: 'A body' }]);
   // The real list selector is #notes; assert the page exposes the synthetic row.
   assert.equal(p.list().children[0].children[0].textContent, 'A private');
   await p.auth('A'); const old = p.pending.at(-1);
   await p.auth('B'); const fresh = p.pending.at(-1);
   assert.equal(p.list().children[0].textContent, '메모를 불러오는 중입니다.');
-  await p.reply(fresh, [{ id: 'b', title: 'B own', content: '' }]);
-  await p.reply(old, [{ id: 'a', title: 'STALE A', content: '' }]);
+  await p.reply(fresh, [{ id: 'b', title: 'B own', body: '' }]);
+  await p.reply(old, [{ id: 'a', title: 'STALE A', body: '' }]);
   assert.equal(p.list().children[0].children[0].textContent, 'B own');
 });
 
@@ -66,8 +66,8 @@ test('overlapping same-account list responses keep the latest result and render 
   await p.auth('A'); const old = p.pending.at(-1);
   await p.auth('A'); const fresh = p.pending.at(-1);
   const attack = '<img src=x onerror=alert(1)>';
-  await p.reply(fresh, [{ id: 'a', title: attack, content: '<script>attack()</script>' }]);
-  await p.reply(old, [{ id: 'b', title: 'OLD', content: '' }]);
+  await p.reply(fresh, [{ id: 'a', title: attack, body: '<script>attack()</script>' }]);
+  await p.reply(old, [{ id: 'b', title: 'OLD', body: '' }]);
   assert.equal(p.list().children[0].children[0].textContent, attack);
   assert.equal(p.list().children[0].children[1].textContent, '<script>attack()</script>');
 });
