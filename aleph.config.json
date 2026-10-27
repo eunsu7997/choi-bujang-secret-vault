@@ -1,5 +1,5 @@
 {
-  "step": 4,
+  "step": 5,
   "repoUrl": "https://github.com/eunsu7997/choi-bujang-secret-vault",
   "publicAppUrl": "https://choi-bujang-secret-vault-livid.vercel.app/",
   "sampleMarker": "SAMPLE_NOTE_1",
@@ -13,6 +13,6 @@
     "/api/notes",
     "/api/notes/:id"
   ],
-  "originalApiUrl": null,
+  "originalApiUrl": "https://pttotbbsqtcsljawwjpr.supabase.co/rest/v1/notes",
   "restoreRoute": null
 }

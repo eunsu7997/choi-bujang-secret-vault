@@ -189,10 +189,93 @@ async function fourthStepChecks(config, app) {
   ];
 }
 
+// 5단계: 자료 요청을 서버 함수 한곳으로 모읍니다. 공개 키로 원본 자료 API를 직접 부르는 길과 정적 파일 노출을 점검합니다.
+function originalApi(config) {
+  let url;
+  try { url = new URL(config.originalApiUrl); } catch { url = null; }
+  if (!url || url.protocol !== 'https:' || url.search || url.hash || url.username || url.password) {
+    throw new Error('aleph.config.json의 originalApiUrl에 쿼리 없는 원본 자료 HTTPS 주소를 넣어 주세요.');
+  }
+  return url;
+}
+
+// 공개(publishable) 키만 씁니다. 화면 설정에서 찾지 못하면 학생 로컬 환경변수를 쓰고, 둘 다 없으면 미실행입니다.
+async function publicKey(app) {
+  try {
+    const response = await anonymousGet(app, '/auth-config.json');
+    const data = response.ok ? await jsonOrNull(response) : null;
+    if (typeof data?.publishableKey === 'string' && data.publishableKey.startsWith('sb_publishable_')) return data.publishableKey;
+  } catch { /* 화면 설정이 없으면 아래로 넘어갑니다. */ }
+  const local = process.env.SUPABASE_PUBLISHABLE_KEY;
+  return typeof local === 'string' && local.startsWith('sb_publishable_') ? local : null;
+}
+
+const SECRET_MARKERS = [/\bsb_secret_[A-Za-z0-9_-]{8,}/u, /"role"\s*:\s*"service_role"/u, /SUPABASE_SECRET_KEY\s*[:=]\s*["'][^"']+/u];
+
+async function fifthStepChecks(config, app) {
+  const route = notesRoute(config);
+  const original = originalApi(config);
+  const key = await publicKey(app);
+  const direct = (init = {}, query = '?select=id&limit=1') => fetch(new URL(`${original.pathname}${query}`, original.origin), {
+    redirect: 'error', signal: AbortSignal.timeout(10000), ...init,
+    headers: { apikey: key, accept: 'application/json', ...(init.headers ?? {}) },
+  });
+  const noKey = '미실행 (공개 키를 화면 설정·로컬 환경변수에서 찾지 못함)';
+  return [
+    await checkDataJson(app),
+    await observe('original_api_anon_read_blocked', '공개 키로 원본 자료 API를 직접 조회하면 거절되거나 메모가 0건', async () => {
+      if (!key) return noKey;
+      const response = await direct();
+      const data = await jsonOrNull(response);
+      return `HTTP ${response.status}, 행 ${Array.isArray(data) ? `${data.length}건` : '배열 아님'}`;
+    }),
+    await observe('original_api_anon_write_blocked', '공개 키로 원본 자료 API를 직접 수정(PATCH)하면 거절됨', async () => {
+      if (!key) return noKey;
+      const response = await direct({ method: 'PATCH', headers: { 'content-type': 'application/json', prefer: 'return=minimal' },
+        body: JSON.stringify({ title: 'attack-check' }) }, `?id=eq.${crypto.randomUUID()}`);
+      return `HTTP ${response.status}`;
+    }),
+    await observe('static_files_secret_scan', '공개 정적 파일·브라우저 묶음에 서버 전용 키와 시드 표식이 없음', async () => {
+      const home = await anonymousGet(app, '/');
+      const html = home.ok ? await home.text() : '';
+      const scripts = [...html.matchAll(/<script[^>]+src="([^"]+)"/gu)].map((m) => m[1])
+        .filter((src) => src.startsWith('/') && !src.startsWith('//'));
+      const paths = [...new Set(['/', '/auth-config.json', '/aleph.json', ...scripts])];
+      let scanned = 0; let secret = 0; let seed = 0; let publishable = 0;
+      for (const path of paths) {
+        const response = path === '/' ? null : await anonymousGet(app, path);
+        const text = path === '/' ? html : (response.ok ? await response.text() : null);
+        if (text === null) continue;
+        scanned += 1;
+        if (SECRET_MARKERS.some((pattern) => pattern.test(text))) secret += 1;
+        if (text.includes(config.sampleMarker)) seed += 1;
+        if (/\bsb_publishable_[A-Za-z0-9_-]{8,}/u.test(text)) publishable += 1;
+      }
+      return `파일 ${scanned}개 검사, 서버 전용 키 ${secret}곳, 시드 표식 ${seed}곳, 공개 키 ${publishable}곳`;
+    }),
+    await observe('anonymous_list_json_error', `비로그인 GET ${route} 요청이 401 또는 403과 JSON 오류 문구로 거절됨`, async () => {
+      const response = await fetch(new URL(route, app), { redirect: 'error', signal: AbortSignal.timeout(10000) });
+      const data = (response.headers.get('content-type') ?? '').includes('application/json') ? await jsonOrNull(response) : null;
+      return `HTTP ${response.status}, JSON ${data ? '응답' : '아님'}, 오류 문구 ${typeof data?.error === 'string' ? '있음' : '없음'}`;
+    }),
+    await observe('home_security_headers', '첫 화면 응답에 X-Content-Type-Options nosniff 또는 CSP 헤더가 있음', async () => {
+      const response = await anonymousGet(app, '/');
+      return `HTTP ${response.status}, nosniff ${response.headers.get('x-content-type-options') === 'nosniff' ? '있음' : '없음'}, `
+        + `CSP ${response.headers.get('content-security-policy') ? '있음' : '없음'}`;
+    }),
+    { attackId: 'original_api_token_access', expected: '공개 키와 학생 로그인 토큰으로 원본 자료 API 직접 조회·수정이 거절됨',
+      observed: '미실행 (로그인 토큰이 필요해 자동 점검하지 않음, DB 권한 확인 SQL로 대조)' },
+    { attackId: 'owner_read_write', expected: `학생 A는 서버 함수 ${route}로 자기 메모를 읽고 쓰며, B·비로그인 요청은 거절됨`,
+      observed: '미실행 (로그인 토큰이 필요해 자동 점검하지 않음, 두 계정으로 브라우저에서 직접 확인)' },
+    await checkIdentity(config, app),
+  ];
+}
+
 export async function runAttackChecks(config) {
   if (config.step === 1) return firstStepChecks(config, appUrl(config));
   if (config.step === 2) return secondStepChecks(config, appUrl(config));
   if (config.step === 3) return thirdStepChecks(config, appUrl(config));
   if (config.step === 4) return fourthStepChecks(config, appUrl(config));
+  if (config.step === 5) return fifthStepChecks(config, appUrl(config));
   throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
 }

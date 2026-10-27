@@ -1,7 +1,15 @@
-# BYTE BACK 방어전 R5 · 4단계
+# BYTE BACK 방어전 R5 · 5단계
 
 - 운영: https://choi-bujang-secret-vault-livid.vercel.app/
 - 저장소: https://github.com/eunsu7997/choi-bujang-secret-vault
+
+## 5단계 · 자료 요청을 서버 한곳으로 모읍니다 (2026-10-27)
+
+- 브라우저의 메모 읽기·추가·수정·삭제는 원래부터 서버 함수(`/api/notes`, `/api/notes/:id`)로만 합니다. 화면 코드에 Supabase 자료 직접 호출(`.from('notes')`, `/rest/v1`)은 없습니다(제작 1: 없음). Supabase는 로그인(Auth)에만 씁니다.
+- DB(`supabase/notes-step5-revoke.sql`): notes의 PUBLIC·anon·authenticated 직접 권한을 모두 회수하고 service_role(서버 함수)만 남깁니다. RLS·FORCE RLS와 4단계 정책 4개는 유지합니다(권한이 없으면 정책만으로 접근 불가). 확인: `notes-step5-check.sql`. 되돌리기: `notes-step4-rls.sql`. 2026-10-27 운영 적용 후 읽기 전용 확인: 권한은 service_role S/I/U/D만, anon·authenticated 없음, RLS·FORCE 켜짐, 정책 4개, 메모 5건. 공개 키로 원본 API 직접 GET·PATCH는 401(42501).
+- `originalApiUrl`: `https://pttotbbsqtcsljawwjpr.supabase.co/rest/v1/notes` (쿼리 없는 원본 자료 경로).
+- 서버 함수의 JWT 검증·(owner_kind, owner_id) 소유자 검사·서버 전용 키 설정은 4단계 그대로입니다.
+- `npm run bundle`의 5단계 자기 점검: 공개 키로 원본 API 직접 조회·수정, 공개 정적 파일의 서버 키·시드 표식 검사, 비로그인 401 JSON, 보안 헤더, /aleph.json. 로그인 토큰이 필요한 2개는 미실행으로 남깁니다.
 
 ## 4단계 · 로그인해도 내 자료만 보이게 합니다 (2026-10-27)
 
@@ -55,7 +63,7 @@ PM 직접 로그인 세션에서 별도로 실행한 A/B 시험은 원본 로그
 
 ## 실행과 DB 보존
 
-의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step4, Supabase identityProvider, allowedRoutes=[/api/notes, /api/notes/:id]입니다.
+의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step5, Supabase identityProvider, allowedRoutes=[/api/notes, /api/notes/:id], originalApiUrl=원본 notes REST 경로입니다.
 
 환경변수 이름은 SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_PUBLISHABLE_KEY입니다. 값은 코드·대화·로그에 적지 않습니다. 현재 DB에서 notes.sql/백업/소유권 SQL을 처음부터 재실행하지 않습니다. 새 환경의 최초 구축은 `docs/DB_OWNERSHIP_RUNBOOK.md`를 현재 스키마와 PM 승인에 대조해 수행합니다.
 
