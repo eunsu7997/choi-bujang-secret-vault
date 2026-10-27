@@ -27,7 +27,7 @@ async function create(handler, authorization, title) {
 
 test('production handler opens owner-scoped writes for students and judges', async () => {
   const source = await readFile(new URL('../api/notes.js', import.meta.url), 'utf8');
-  assert.match(source.slice(source.indexOf('export default createNotesHandler')), /writesEnabled: true,/u);
+  assert.match(source.slice(source.indexOf('const notesHandler = createNotesHandler')), /writesEnabled: true,/u);
 });
 
 test('anonymous list is refused with 401 JSON, never HTML or an empty list', async () => {

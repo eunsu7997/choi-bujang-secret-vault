@@ -9,7 +9,7 @@ const sql = async (name) => (await read(`supabase/${name}`)).replace(/--.*$/gmu,
 test('browser code reaches notes only through the server function', async () => {
   const page = await read('public/index.html');
   assert.doesNotMatch(page, /\.from\(\s*['"]notes['"]|\/rest\/v1|\.rpc\(/u);
-  assert.match(page, /fetch\(id \? `\/api\/notes\/\$\{encodeURIComponent\(id\)\}` : '\/api\/notes'/u);
+  assert.match(page, /sendNotes\(id \? `\/api\/notes\/\$\{encodeURIComponent\(id\)\}` : '\/api\/notes'/u);
   assert.doesNotMatch(page, /sb_secret_|SUPABASE_SECRET_KEY|SAMPLE_NOTE_/u);
 });
 
@@ -32,7 +32,7 @@ test('config names the query-free original data API and keeps allowed routes', a
   assert.equal(url.search, '');
   assert.equal(url.origin, new URL(config.identityProvider.issuer).origin);
   assert.equal(url.pathname, '/rest/v1/notes');
-  assert.deepEqual(config.allowedRoutes, ['/api/notes', '/api/notes/:id']);
+  assert.deepEqual(config.allowedRoutes, ['/api/notes', '/api/notes/:id', '/api/auth/login', '/api/auth/session', '/api/auth/logout']);
 });
 
 test('self-check implements step 5 without printing keys', async () => {

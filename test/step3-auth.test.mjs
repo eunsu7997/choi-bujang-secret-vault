@@ -228,7 +228,7 @@ test('factory defaults remain read-only and production explicitly enables owner-
   assert.equal(store.rows.size, 0);
   assert.equal((await call(handler, { method: 'GET', headers })).status, 200);
   const source = await readFile(new URL('../api/notes.js', import.meta.url), 'utf8');
-  const defaultExport = source.slice(source.indexOf('export default createNotesHandler'));
+  const defaultExport = source.slice(source.indexOf('const notesHandler = createNotesHandler'));
   assert.match(defaultExport, /writesEnabled: true,/u);
   assert.doesNotMatch(source, /process\.env\.[A-Z_]*WRITE/u);
 });

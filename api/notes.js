@@ -4,6 +4,8 @@ import { createRequire } from 'node:module';
 import { createClient } from '@supabase/supabase-js';
 import { createLoginVerifier } from '../src/verify-login.mjs';
 import { createFields, putFields, publicNote, noteRoute } from '../src/notes-contract.mjs';
+import { ACCESS_COOKIE, readCookies, sameOrigin } from '../src/session-cookie.mjs';
+import { authAction, authClientsFromEnv, createAuthHandler } from '../src/auth-handler.mjs';
 
 const appConfig = createRequire(import.meta.url)('../aleph.config.json');
 const MAX_NOTES = 50;
@@ -106,12 +108,21 @@ export function createNotesHandler({ getVerifier, getStore, writesEnabled = fals
     try { verify = getVerifier(); } catch { verify = null; }
     if (!verify) return response.status(500).json({ error: 'NOTES_NOT_CONFIGURED' });
 
+    // Authorization 헤더(심판·자동 점검)가 있으면 그것만 씁니다. 없을 때만 화면 로그인 쿠키를 봅니다.
+    const header = request.headers?.authorization;
+    const cookieToken = header === undefined ? readCookies(request)[ACCESS_COOKIE] : undefined;
+    const authorization = header !== undefined ? header : (cookieToken ? `Bearer ${cookieToken}` : undefined);
     let owner = null;
-    try { owner = ownerOf(await verify(request.headers?.authorization)); } catch { owner = null; }
+    try { owner = ownerOf(await verify(authorization)); } catch { owner = null; }
     // 위조·만료·다른 서비스 토큰·무토큰을 구분하지 않고 같은 응답으로 거절합니다.
     if (!owner) {
       response.setHeader('WWW-Authenticate', 'Bearer');
       return response.status(401).json({ error: 'UNAUTHORIZED' });
+    }
+
+    // 쿠키로 인증한 변경 요청은 같은 출처에서 온 것만 받습니다.
+    if (cookieToken && method !== 'GET' && !sameOrigin(request)) {
+      return response.status(403).json({ error: 'CROSS_ORIGIN_REJECTED' });
     }
 
     // Explicit modes only: production enables students while judge writes remain gated.
@@ -169,7 +180,7 @@ export function createNotesHandler({ getVerifier, getStore, writesEnabled = fals
   };
 }
 
-export default createNotesHandler({
+const notesHandler = createNotesHandler({
   getVerifier: () => verifierFromEnv(),
   getStore: () => {
     const client = supabaseFromEnv();
@@ -179,3 +190,13 @@ export default createNotesHandler({
   // 심판도 자기 메모를 만들어야 "타인 메모 접근 차단" 시험이 성립하므로 쓰기를 엽니다.
   writesEnabled: true,
 });
+
+// 5단계 가점: 화면 로그인(/api/auth/login·session·logout)도 이 서버 함수가 처리합니다.
+const authHandler = createAuthHandler({
+  getClients: () => authClientsFromEnv(process.env, appConfig),
+  getVerifier: () => verifierFromEnv(),
+});
+
+export default function handler(request, response) {
+  return authAction(request) !== null ? authHandler(request, response) : notesHandler(request, response);
+}

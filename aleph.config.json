@@ -11,7 +11,10 @@
   },
   "allowedRoutes": [
     "/api/notes",
-    "/api/notes/:id"
+    "/api/notes/:id",
+    "/api/auth/login",
+    "/api/auth/session",
+    "/api/auth/logout"
   ],
   "originalApiUrl": "https://pttotbbsqtcsljawwjpr.supabase.co/rest/v1/notes",
   "restoreRoute": null

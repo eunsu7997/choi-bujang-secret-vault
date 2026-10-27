@@ -43,59 +43,24 @@ function build(env, args = ['--local']) {
     { cwd: root, env: { ...clean, ...env }, encoding: 'utf8' });
 }
 
-test('build writes only the public login settings and the pinned browser bundle', async (t) => {
-  t.after(() => rm(authConfigPath, { force: true }));
-  const result = build({ SUPABASE_URL: `${fakeUrl}/`, SUPABASE_PUBLISHABLE_KEY: fakePublishable,
-    SUPABASE_SECRET_KEY: fakeSecret });
-  assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(await read('public/auth-config.json')),
-    { supabaseUrl: fakeUrl, publishableKey: fakePublishable });
-  assert.doesNotMatch(await read('public/auth-config.json'), /sb_secret_/u);
-  const vendor = await read('public/vendor/supabase.js');
-  const pinned = await read('node_modules/@supabase/supabase-js/dist/umd/supabase.js');
-  assert.equal(vendor, pinned);
-  assert.doesNotMatch(result.stdout + result.stderr, /TESTONLY/u);
-});
-
-test('build refuses a server key or malformed URL in the browser settings without echoing it', () => {
-  for (const env of [
-    { SUPABASE_URL: fakeUrl, SUPABASE_PUBLISHABLE_KEY: fakeSecret },
-    { SUPABASE_URL: fakeUrl, SUPABASE_PUBLISHABLE_KEY: fakePublishable, SUPABASE_SECRET_KEY: fakePublishable },
-    { SUPABASE_URL: 'http://abc.supabase.co', SUPABASE_PUBLISHABLE_KEY: fakePublishable },
-    { SUPABASE_URL: `${fakeUrl}/rest/v1`, SUPABASE_PUBLISHABLE_KEY: fakePublishable },
-  ]) {
+test('build publishes no Supabase key or browser SDK and removes stale copies', async () => {
+  const vendorDir = new URL('public/vendor/', root);
+  for (const env of [{ SUPABASE_URL: `${fakeUrl}/`, SUPABASE_PUBLISHABLE_KEY: fakePublishable, SUPABASE_SECRET_KEY: fakeSecret }, {}]) {
     writeFileSync(authConfigPath, '{"TESTONLY":"stale"}\n');
     const result = build(env);
-    assert.notEqual(result.status, 0);
-    assert.doesNotMatch(result.stdout + result.stderr, /TESTONLY/u);
+    assert.equal(result.status, 0, result.stderr);
     assert.equal(existsSync(authConfigPath), false);
+    assert.equal(existsSync(vendorDir), false);
+    assert.doesNotMatch(result.stdout + result.stderr, /TESTONLY|sb_publishable_|sb_secret_/u);
   }
 });
 
-test('deploy build requires the publishable key; local build without settings keeps the local file', () => {
-  writeFileSync(authConfigPath, '{"TESTONLY":"stale"}\n');
-  const deploy = build({}, []);
-  assert.notEqual(deploy.status, 0);
-  assert.match(deploy.stderr, /SUPABASE_PUBLISHABLE_KEY/u);
-  assert.equal(existsSync(authConfigPath), false);
-  writeFileSync(authConfigPath, '{"TESTONLY":"local"}\n');
-  const local = build({});
-  assert.equal(local.status, 0, local.stderr);
-  assert.equal(readFileSync(authConfigPath, 'utf8'), '{"TESTONLY":"local"}\n');
-  rmSync(authConfigPath, { force: true });
-  const empty = build({});
-  assert.equal(empty.status, 0, empty.stderr);
-  assert.equal(existsSync(authConfigPath), false);
-});
-
-test('page signs in with Supabase Auth and sends the access token to /api/notes', async () => {
+test('page logs in through the server function and never holds Supabase keys or tokens', async () => {
   const page = await read('public/index.html');
-  assert.match(page, /<script src="\/vendor\/supabase\.js"><\/script>/u);
-  assert.match(page, /fetch\('\/auth-config\.json'/u);
-  assert.match(page, /auth\.signInWithPassword\(/u);
-  assert.match(page, /auth\.signOut\(\)/u);
-  assert.match(page, /Authorization: `Bearer \$\{session\.access_token\}`/u);
-  assert.doesNotMatch(page, /sb_secret_|service_role|SUPABASE_SECRET_KEY|innerHTML|cdn\.|https?:\/\//u);
+  assert.match(page, /fetch\('\/api\/auth\/login'/u);
+  assert.match(page, /fetch\('\/api\/auth\/session'/u);
+  assert.match(page, /fetch\('\/api\/auth\/logout'/u);
+  assert.doesNotMatch(page, /vendor\/supabase|auth-config|createClient|sb_publishable_|sb_secret_|service_role|SUPABASE_|access_token|refresh_token|localStorage|innerHTML|cdn\.|https?:\/\//u);
   assert.match(page, /if \(turn !== renderTurn\) return;/u);
   // .auth form의 display: grid가 hidden 속성을 덮어써 로그인 뒤에도 폼이 보이던 회귀를 막습니다.
   assert.match(page, /\.auth \[hidden\] \{ display: none; \}/u);

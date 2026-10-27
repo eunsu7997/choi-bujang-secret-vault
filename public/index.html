@@ -35,10 +35,10 @@
 </head>
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 3단계 진짜 로그인</div>
+    <div class="eyebrow">BYTE BACK · 5단계 서버 한곳으로</div>
     <h1>점령된 자료실</h1>
     <p>로그인한 사용자에게만 서버 API의 메모를 보여 줍니다. 아래 기록은 모두 실습을 위해 만든 가상 자료입니다.</p>
-    <div class="notice">서버 API가 로그인 토큰을 직접 확인하고, 각 사용자는 자기 메모만 볼 수 있습니다.</div>
+    <div class="notice">로그인과 메모 요청은 모두 이 사이트의 서버 함수를 거칩니다. 서버가 로그인을 확인하고, 각 사용자는 자기 메모만 볼 수 있습니다.</div>
     <section class="auth" aria-label="로그인">
       <form id="login-form" hidden>
         <label>이메일 <input id="email" type="email" autocomplete="username" required></label>
@@ -48,7 +48,7 @@
       <div id="signed-in" hidden>
         <button id="logout" type="button">로그아웃</button>
       </div>
-      <p id="auth-status" role="status">로그인 설정을 불러오는 중입니다.</p>
+      <p id="auth-status" role="status">로그인 상태를 확인하는 중입니다.</p>
     </section>
     <section class="auth" id="editor-section" aria-label="메모 쓰기" hidden>
       <form id="note-form">
@@ -63,7 +63,6 @@
     </section>
     <ul id="notes" aria-live="polite"><li>로그인하면 가상 메모를 볼 수 있습니다.</li></ul>
   </main>
-  <script src="/vendor/supabase.js"></script>
   <script type="module">
     const list = document.querySelector('#notes');
     const form = document.querySelector('#login-form');
@@ -88,16 +87,32 @@
     const WRITE_MESSAGES = {
       400: '입력을 확인하세요. 제목은 1~200자, 내용은 10,000자까지입니다.',
       401: '서버가 로그인을 확인하지 못했습니다. 로그아웃 후 다시 로그인하세요.',
-      403: '메모 쓰기는 아직 꺼져 있습니다. DB 소유권 적용과 검증 뒤에 켜집니다.',
+      403: '요청이 거절되었습니다. 페이지를 새로 열어 다시 시도하세요.',
       404: '메모를 찾을 수 없습니다. 목록을 새로 불러옵니다.',
     };
 
+    // 로그인 토큰은 HttpOnly 쿠키로만 오갑니다. 화면 코드는 토큰을 읽거나 보내지 않습니다.
+    const JSON_HEADERS = { 'Content-Type': 'application/json' };
+    async function sessionApi() {
+      try {
+        const response = await fetch('/api/auth/session', { cache: 'no-store', credentials: 'same-origin' });
+        const data = response.ok ? await response.json() : null;
+        return data?.signedIn === true && typeof data.userId === 'string' ? { userId: data.userId } : null;
+      } catch { return null; }
+    }
+
+    // 접근 토큰이 만료되면 서버가 갱신하도록 세션을 한 번 확인한 뒤 다시 보냅니다.
+    async function sendNotes(path, init) {
+      const send = () => fetch(path, { cache: 'no-store', credentials: 'same-origin', ...init });
+      let response = await send();
+      if (response.status === 401 && await sessionApi()) response = await send();
+      return response;
+    }
+
     async function notesApi(method, { id, body } = {}) {
       if (!currentSession) throw new Error(WRITE_MESSAGES[401]);
-      const response = await fetch(id ? `/api/notes/${encodeURIComponent(id)}` : '/api/notes', {
-        method, cache: 'no-store',
-        headers: { Authorization: `Bearer ${currentSession.access_token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
-        body: body ? JSON.stringify(body) : undefined,
+      const response = await sendNotes(id ? `/api/notes/${encodeURIComponent(id)}` : '/api/notes', {
+        method, headers: body ? JSON_HEADERS : {}, body: body ? JSON.stringify(body) : undefined,
       });
       if (!response.ok) {
         const error = new Error(WRITE_MESSAGES[response.status] ?? '자료 API를 사용할 수 없습니다.');
@@ -182,9 +197,7 @@
     async function loadNotes(session, turn) {
       const requestTurn = ++loadTurn;
       try {
-        const response = await fetch('/api/notes', {
-          cache: 'no-store', headers: { Authorization: `Bearer ${session.access_token}` },
-        });
+        const response = await sendNotes('/api/notes', {});
         if (response.status === 401) throw new Error('서버가 로그인을 확인하지 못했습니다. 로그아웃 후 다시 로그인하세요.');
         if (!response.ok) throw new Error('자료 API를 읽을 수 없습니다.');
         const data = await response.json();
@@ -208,7 +221,7 @@
       form.hidden = Boolean(session);
       signedIn.hidden = !session;
       editorSection.hidden = !session;
-      const user = session ? (session.user?.id ?? session.access_token) : null;
+      const user = session ? session.userId : null;
       if (user !== currentUser) {
         // 다른 사용자로 바뀌면 앞 사용자의 편집 내용과 안내를 남기지 않습니다.
         sessionGen += 1;
@@ -222,17 +235,6 @@
       if (!session) pendingNotice = '';
       if (session) loadNotes(session, turn);
       else showMessage('로그인하면 가상 메모를 볼 수 있습니다.');
-    }
-
-    let client;
-    try {
-      const response = await fetch('/auth-config.json', { cache: 'no-store' });
-      if (!response.ok) throw new Error('missing');
-      const config = await response.json();
-      client = window.supabase.createClient(config.supabaseUrl, config.publishableKey);
-    } catch {
-      status.textContent = '로그인 설정을 불러올 수 없습니다.';
-      showMessage('로그인 설정이 없어 메모를 불러오지 않습니다.');
     }
 
     try {
@@ -268,68 +270,59 @@
       loadNotes(currentSession, renderTurn);
     });
 
-    if (client) {
-      // 콜백 안에서 Supabase 호출을 기다리지 않도록 렌더링을 다음 차례로 넘깁니다.
-      client.auth.onAuthStateChange((_event, session) => setTimeout(() => render(session), 0));
-      form.addEventListener('submit', async event => {
-        event.preventDefault();
-        const button = form.querySelector('button');
-        button.disabled = true;
-        let error;
-        try {
-          ({ error } = await client.auth.signInWithPassword({
-            email: form.querySelector('#email').value, password: form.querySelector('#password').value,
-          }));
-        } catch { error = true; }
-        finally {
-          form.querySelector('#password').value = '';
-          button.disabled = false;
-        }
-        // 계정 존재 여부를 알려 주지 않도록 같은 문구를 씁니다.
-        if (error) status.textContent = '로그인에 실패했습니다. 이메일과 비밀번호를 확인하세요.';
-      });
-      document.querySelector('#logout').addEventListener('click', async event => {
-        const button = event.currentTarget;
-        button.disabled = true;
-        renderTurn += 1;
-        // 로그아웃을 누른 순간부터 이 세션으로는 메모를 다루지 않습니다.
-        sessionGen += 1;
-        currentSession = null;
-        currentUser = null;
-        resetEditor();
-        noteStatus.textContent = '';
-        editorSection.hidden = true;
-        list.replaceChildren();
-        let failed = false;
-        try {
-          ({ error: failed } = await client.auth.signOut());
-        } catch {
-          failed = true;
-        }
-        // 서버 로그아웃이 실패해도 이 기기의 세션은 반드시 지웁니다.
-        if (failed) {
-          let localFailed = false;
-          try { ({ error: localFailed } = await client.auth.signOut({ scope: 'local' })); } catch { localFailed = true; }
-          if (localFailed) {
-            // 로컬 정리마저 실패하면 남은 Supabase 세션 항목을 직접 지우고 새로 엽니다.
-            try {
-              for (const key of Object.keys(localStorage)) {
-                if (key.startsWith('sb-') && key.endsWith('-auth-token')) localStorage.removeItem(key);
-              }
-            } catch { /* 저장소 접근이 막혀도 새로 열어 메모리의 세션을 버립니다. */ }
-            try { sessionStorage.setItem('logout-notice', '1'); } catch { /* 안내만 생략됩니다. */ }
-            location.reload();
-            return;
-          }
-        }
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const button = form.querySelector('button');
+      button.disabled = true;
+      let session = null;
+      try {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST', cache: 'no-store', credentials: 'same-origin', headers: JSON_HEADERS,
+          body: JSON.stringify({ email: form.querySelector('#email').value, password: form.querySelector('#password').value }),
+        });
+        const data = response.ok ? await response.json() : null;
+        if (data?.signedIn === true && typeof data.userId === 'string') session = { userId: data.userId };
+        else if (response.status === 429) status.textContent = '로그인 시도가 너무 많습니다. 잠시 뒤 다시 시도하세요.';
+      } catch { session = null; }
+      finally {
+        form.querySelector('#password').value = '';
         button.disabled = false;
-        if (failed) {
-          pendingNotice = LOGOUT_SERVER_FAILED;
-          // 로그아웃 렌더링이 이미 끝났다면 지금 보여 줍니다.
-          if (!form.hidden) { status.textContent = pendingNotice; pendingNotice = ''; }
-        }
-      });
-    }
+      }
+      // 계정 존재 여부를 알려 주지 않도록 같은 문구를 씁니다.
+      if (session) render(session);
+      else if (!status.textContent.startsWith('로그인 시도가')) status.textContent = '로그인에 실패했습니다. 이메일과 비밀번호를 확인하세요.';
+    });
+
+    document.querySelector('#logout').addEventListener('click', async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      renderTurn += 1;
+      // 로그아웃을 누른 순간부터 이 세션으로는 메모를 다루지 않습니다.
+      sessionGen += 1;
+      currentSession = null;
+      currentUser = null;
+      resetEditor();
+      noteStatus.textContent = '';
+      editorSection.hidden = true;
+      list.replaceChildren();
+      let revoked = false;
+      try {
+        const response = await fetch('/api/auth/logout', { method: 'POST', cache: 'no-store', credentials: 'same-origin', headers: JSON_HEADERS, body: '{}' });
+        revoked = response.ok && (await response.json())?.revoked === true;
+      } catch { revoked = false; }
+      button.disabled = false;
+      // 서버가 쿠키를 지우지 못했을 수 있으니 실제 상태를 다시 확인합니다.
+      const still = await sessionApi();
+      if (still) {
+        try { sessionStorage.setItem('logout-notice', '1'); } catch { /* 안내만 생략됩니다. */ }
+        location.reload();
+        return;
+      }
+      if (!revoked) pendingNotice = LOGOUT_SERVER_FAILED;
+      render(null);
+    });
+
+    render(await sessionApi());
   </script>
 </body>
 </html>

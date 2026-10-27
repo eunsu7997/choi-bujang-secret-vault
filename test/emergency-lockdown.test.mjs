@@ -15,7 +15,7 @@ for (const method of ['GET','POST','PUT','DELETE','HEAD','OPTIONS']) {
 }
 test('step 4 deployment enables owner-scoped writes for students and judges', async () => {
   const source=await readFile(new URL('../api/notes.js',import.meta.url),'utf8');
-  assert.match(source.slice(source.indexOf('export default createNotesHandler')),/writesEnabled: true,/u);
+  assert.match(source.slice(source.indexOf('const notesHandler = createNotesHandler')),/writesEnabled: true,/u);
 });
 test('B-1 deployment never reads a write-enable environment switch', async () => {
   const source=await readFile(new URL('../api/notes.js',import.meta.url),'utf8');

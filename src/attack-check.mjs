@@ -248,10 +248,11 @@ async function fifthStepChecks(config, app) {
         if (text === null) continue;
         scanned += 1;
         if (SECRET_MARKERS.some((pattern) => pattern.test(text))) secret += 1;
-        if (text.includes(config.sampleMarker)) seed += 1;
+        // /aleph.json의 sampleMarker는 공식 배포 식별 형식이라 시드 노출로 세지 않습니다.
+        if (path !== '/aleph.json' && text.includes(config.sampleMarker)) seed += 1;
         if (/\bsb_publishable_[A-Za-z0-9_-]{8,}/u.test(text)) publishable += 1;
       }
-      return `파일 ${scanned}개 검사, 서버 전용 키 ${secret}곳, 시드 표식 ${seed}곳, 공개 키 ${publishable}곳`;
+      return `파일 ${scanned}개 검사, 서버 전용 키 ${secret}곳, 시드 표식 ${seed}곳(공식 /aleph.json 제외), 공개 키 ${publishable}곳`;
     }),
     await observe('anonymous_list_json_error', `비로그인 GET ${route} 요청이 401 또는 403과 JSON 오류 문구로 거절됨`, async () => {
       const response = await fetch(new URL(route, app), { redirect: 'error', signal: AbortSignal.timeout(10000) });

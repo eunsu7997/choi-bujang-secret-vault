@@ -3,6 +3,14 @@
 - 운영: https://choi-bujang-secret-vault-livid.vercel.app/
 - 저장소: https://github.com/eunsu7997/choi-bujang-secret-vault
 
+## 5단계 가점 · 화면에서 Supabase 공개 키 없애기 (브랜치 step5-server-login)
+
+- 로그인·세션 확인·로그아웃을 서버 함수로 옮겼습니다: `POST /api/auth/login`, `GET /api/auth/session`, `POST /api/auth/logout`. 공식 패키징 기준표(서버 함수 목록)를 지키기 위해 새 함수 파일 없이 `api/notes.js` 안에서 처리합니다(`src/auth-handler.mjs`).
+- 토큰은 `__Host-vault_at`·`__Host-vault_rt` 쿠키(HttpOnly, Secure, SameSite=Strict, Path=/)에만 둡니다. 화면 코드는 토큰·공개 키·Supabase SDK를 다루지 않으며, 빌드는 `auth-config.json`과 `vendor/`를 만들지 않고 남은 것도 지웁니다.
+- `/api/notes`는 Authorization 헤더(심판·자동 점검)를 우선하고, 헤더가 없을 때만 로그인 쿠키를 씁니다. 쿠키로 인증한 변경 요청은 같은 출처(Origin·Sec-Fetch-Site)만 허용합니다. 소유자 검사는 그대로입니다.
+- 로그인 실패는 같은 문구(401)이며, 서버 인스턴스 안에서 IP·이메일별 10분 5회 실패 시 429입니다(Supabase Auth 자체 제한과 함께). 세션 복원 시 접근 토큰이 만료됐으면 갱신 토큰으로 새로 받습니다. 로그아웃은 서버 세션 종료(local) 후 쿠키를 항상 지웁니다.
+- 한계: 실패 횟수 제한은 서버 인스턴스별입니다. 로그아웃 전에 발급된 접근 토큰은 만료(최대 1시간)까지 유효할 수 있습니다.
+
 ## 5단계 · 자료 요청을 서버 한곳으로 모읍니다 (2026-10-27)
 
 - 브라우저의 메모 읽기·추가·수정·삭제는 원래부터 서버 함수(`/api/notes`, `/api/notes/:id`)로만 합니다. 화면 코드에 Supabase 자료 직접 호출(`.from('notes')`, `/rest/v1`)은 없습니다(제작 1: 없음). Supabase는 로그인(Auth)에만 씁니다.
@@ -63,7 +71,7 @@ PM 직접 로그인 세션에서 별도로 실행한 A/B 시험은 원본 로그
 
 ## 실행과 DB 보존
 
-의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step5, Supabase identityProvider, allowedRoutes=[/api/notes, /api/notes/:id], originalApiUrl=원본 notes REST 경로입니다.
+의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step5, Supabase identityProvider, allowedRoutes=[/api/notes, /api/notes/:id, /api/auth/login, /api/auth/session, /api/auth/logout], originalApiUrl=원본 notes REST 경로입니다.
 
 환경변수 이름은 SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_PUBLISHABLE_KEY입니다. 값은 코드·대화·로그에 적지 않습니다. 현재 DB에서 notes.sql/백업/소유권 SQL을 처음부터 재실행하지 않습니다. 새 환경의 최초 구축은 `docs/DB_OWNERSHIP_RUNBOOK.md`를 현재 스키마와 PM 승인에 대조해 수행합니다.
 

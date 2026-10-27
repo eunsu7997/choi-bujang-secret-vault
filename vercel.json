@@ -4,18 +4,36 @@
   "buildCommand": "npm run build",
   "outputDirectory": "public",
   "rewrites": [
-    { "source": "/api/notes/:id", "destination": "/api/notes?id=:id" }
+    {
+      "source": "/api/notes/:id",
+      "destination": "/api/notes?id=:id"
+    },
+    {
+      "source": "/api/auth/:action",
+      "destination": "/api/notes?auth=:action"
+    }
   ],
   "functions": {
-    "api/notes.js": { "includeFiles": "aleph.config.json" }
+    "api/notes.js": {
+      "includeFiles": "aleph.config.json"
+    }
   },
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Content-Security-Policy", "value": "frame-ancestors 'none'" },
-        { "key": "X-Frame-Options", "value": "DENY" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "frame-ancestors 'none'"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        }
       ]
     }
   ]

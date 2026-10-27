@@ -21,27 +21,34 @@ async function page() {
   function get(key) { if (!elements.has(key)) elements.set(key, new Element(key)); return elements.get(key); }
   const pending = [];
   const timers = [];
-  let listener;
+  let serverUser = null;
+  let nextLogin = null;
   let failLogin = false;
+  const json = (status, data) => ({ ok: status < 400, status, json: async () => data });
   const context = {
     document: { querySelector: get, createElement: tag => new Element(tag) },
-    window: { supabase: { createClient: () => ({ auth: {
-      onAuthStateChange(fn) { listener = fn; },
-      async signInWithPassword() { if (failLogin) throw new Error('synthetic'); return { error: null }; },
-      async signOut() { listener('SIGNED_OUT', null); return { error: null }; },
-    } }) } },
     fetch: async (url, init = {}) => {
-      if (url === '/auth-config.json') return { ok: true, json: async () => ({ supabaseUrl: 'synthetic', publishableKey: 'synthetic' }) };
+      // 화면 로그인 서버 함수 흉내: 토큰은 화면에 오지 않고 로그인 여부와 사용자 구분값만 옵니다.
+      if (url === '/api/auth/session') return json(200, serverUser ? { signedIn: true, userId: serverUser } : { signedIn: false });
+      if (url === '/api/auth/login') {
+        if (failLogin) throw new Error('synthetic');
+        serverUser = nextLogin;
+        return json(200, { signedIn: true, userId: serverUser });
+      }
+      if (url === '/api/auth/logout') { serverUser = null; return json(200, { signedIn: false, revoked: true }); }
       return new Promise(resolve => pending.push({ url, init, resolve }));
     },
     setTimeout(fn) { timers.push(fn); return timers.length; }, clearTimeout() {},
-    sessionStorage: { getItem() {}, removeItem() {}, setItem() {} }, localStorage: {},
+    sessionStorage: { getItem() {}, removeItem() {}, setItem() {} },
     location: { reload() {} },
   };
   await vm.runInNewContext(`(async () => {${script}\n})()`, context);
   const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
-  const session = id => ({ user: { id }, access_token: 'synthetic-' + id });
-  const auth = async id => { listener('CHANGED', id ? session(id) : null); while (timers.length) timers.shift()(); await flush(); };
+  const auth = async id => {
+    if (id) { nextLogin = id; await get('#login-form').fire('submit'); }
+    else await get('#logout').fire('click');
+    await flush();
+  };
   const reply = async (request, notes = [], status = 200) => { request.resolve({ ok: status < 400, status, json: async () => notes }); await flush(); };
   const list = () => get('#notes');
   return { get, pending, auth, reply, flush, list, failLogin: () => { failLogin = true; } };
@@ -78,13 +85,14 @@ test('in-flight create cannot overwrite another account editor and logout clears
   p.get('#note-title').value = 'new';
   const save = p.get('#note-form').fire('submit'); const request = p.pending.at(-1);
   assert.equal(request.init.method, 'POST');
-  assert.equal(request.init.headers.Authorization, 'Bearer synthetic-A');
+  assert.equal(request.init.headers.Authorization, undefined);
+  assert.equal(request.init.credentials, 'same-origin');
   await p.auth('B'); await p.reply(p.pending.at(-1));
   p.get('#note-title').value = 'B draft';
   await p.reply(request, [], 201); await save;
   assert.equal(p.get('#note-title').value, 'B draft');
   assert.equal(p.get('#note-status').textContent, '');
-  await p.get('#logout').fire('click'); await p.auth(null);
+  await p.auth(null);
   assert.equal(p.get('#editor-section').hidden, true);
   assert.equal(p.list().children[0].textContent, '로그인하면 가상 메모를 볼 수 있습니다.');
 });

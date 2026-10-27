@@ -169,12 +169,13 @@ test('ownership SQL is transactional with prechecks, and rollback refuses to mer
 
 test('CRUD page sends the login token, renders text only and never uses blocking dialogs', async () => {
   const page = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
-  assert.match(page, /Authorization: `Bearer \$\{currentSession\.access_token\}`/u);
+  assert.match(page, /credentials: 'same-origin'/u);
+  assert.doesNotMatch(page, /Authorization|access_token/u);
   assert.match(page, /encodeURIComponent\(id\)/u);
   assert.match(page, /id="note-title" maxlength="200" required/u);
   assert.match(page, /id="note-content" maxlength="10000"/u);
   assert.match(page, /title\.textContent = note\.title;/u);
-  assert.match(page, /403: '메모 쓰기는 아직 꺼져 있습니다/u);
+  assert.match(page, /403: '요청이 거절되었습니다/u);
   assert.doesNotMatch(page, /innerHTML|insertAdjacentHTML|outerHTML|document\.write|\b(alert|confirm|prompt)\(/u);
   assert.doesNotMatch(page, /owner_id|owner_kind/u);
 });

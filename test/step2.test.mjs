@@ -91,7 +91,7 @@ test('step 2 page reads the API and public data.json is gone', async () => {
   const config = JSON.parse(await read('aleph.config.json'));
   assert.ok(config.step >= 2);
   const page = await read('public/index.html');
-  assert.match(page, /fetch\('\/api\/notes'/u);
+  assert.match(page, /sendNotes\('\/api\/notes'/u);
   assert.doesNotMatch(page, /data\.json/u);
   execFileSync(process.execPath, ['scripts/build-public.mjs', '--local'], { cwd: root });
   assert.equal(existsSync(new URL('public/data.json', root)), false);
