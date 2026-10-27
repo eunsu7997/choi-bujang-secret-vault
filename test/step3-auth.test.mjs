@@ -217,7 +217,7 @@ test('CRUD rejects invalid input without writing', async () => {
   assert.equal(store.rows.size, 0);
 });
 
-test('factory defaults remain read-only and production explicitly enables only students', async () => {
+test('factory defaults remain read-only and production explicitly enables owner-scoped writes', async () => {
   const store = memoryStore();
   const handler = createNotesHandler({ getVerifier: () => verify, getStore: () => store });
   const headers = { authorization: bearer(await studentToken()) };
@@ -229,7 +229,7 @@ test('factory defaults remain read-only and production explicitly enables only s
   assert.equal((await call(handler, { method: 'GET', headers })).status, 200);
   const source = await readFile(new URL('../api/notes.js', import.meta.url), 'utf8');
   const defaultExport = source.slice(source.indexOf('export default createNotesHandler'));
-  assert.match(defaultExport, /writesEnabled: 'students-only'/u);
+  assert.match(defaultExport, /writesEnabled: true,/u);
   assert.doesNotMatch(source, /process\.env\.[A-Z_]*WRITE/u);
 });
 

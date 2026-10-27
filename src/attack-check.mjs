@@ -136,9 +136,63 @@ async function thirdStepChecks(config, app) {
   ];
 }
 
+// 4단계: 소유권 격리. 로그인 토큰이 필요한 A/B 교차 시험은 자동으로 보내지 않고 미실행으로 남깁니다.
+async function fourthStepChecks(config, app) {
+  const route = notesRoute(config);
+  const { issuer, audience } = config.identityProvider ?? {};
+  if (typeof issuer !== 'string' || typeof audience !== 'string') {
+    throw new Error('aleph.config.json의 identityProvider를 먼저 채워 주세요.');
+  }
+  const send = (init) => fetch(new URL(route, app), { redirect: 'error', signal: AbortSignal.timeout(10000), ...init });
+  return [
+    await checkDataJson(app),
+    await observe('anonymous_list_json_error', `비로그인 GET ${route} 요청이 401 또는 403과 JSON 오류 문구로 거절됨`, async () => {
+      const response = await send({});
+      const type = response.headers.get('content-type') ?? '';
+      const data = type.includes('application/json') ? await jsonOrNull(response) : null;
+      const message = typeof data?.error === 'string' && data.error.length > 0;
+      return `HTTP ${response.status}, JSON ${data ? '응답' : '아님'}, 오류 문구 ${message ? '있음' : '없음'}`;
+    }),
+    await observe('forged_token_rejected', `임시 키로 서명한 위조 토큰의 GET ${route} 요청이 401로 거절됨`, async () =>
+      statusOnly(send({ headers: { authorization: `Bearer ${await forgedToken(issuer, audience)}` } }))),
+    await observe('forged_owner_write_blocked', `비로그인 POST ${route} 요청에 owner_id를 넣어도 401로 거절됨`, async () =>
+      statusOnly(send({ method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title: 'attack-check', body: '', owner_id: crypto.randomUUID() }) }))),
+    await observe('anonymous_item_delete_blocked', `비로그인 DELETE ${route}/:id 요청이 401로 거절됨`, async () =>
+      statusOnly(fetch(new URL(`${route}/${crypto.randomUUID()}`, app),
+        { method: 'DELETE', redirect: 'error', signal: AbortSignal.timeout(10000) }))),
+    await observe('data_api_anon_key_blocked',
+      '공개 anon(publishable) 키로 Supabase Data API notes 직접 조회가 거절되거나 행이 0건', async () => {
+        const settings = await jsonOrNull(await anonymousGet(app, '/auth-config.json'));
+        let base;
+        try { base = new URL(settings?.supabaseUrl); } catch { return '공개 로그인 설정을 읽지 못해 미실행'; }
+        if (base.protocol !== 'https:' || typeof settings?.publishableKey !== 'string') return '공개 로그인 설정을 읽지 못해 미실행';
+        const response = await fetch(new URL('/rest/v1/notes?select=id&limit=1', base.origin), {
+          redirect: 'error', signal: AbortSignal.timeout(10000),
+          headers: { apikey: settings.publishableKey, accept: 'application/json' },
+        });
+        const data = await jsonOrNull(response);
+        const rows = Array.isArray(data) ? `${data.length}건` : '배열 아님';
+        return `HTTP ${response.status}, 행 ${rows}`;
+      }),
+    await observe('home_security_headers', '첫 화면 응답에 X-Content-Type-Options nosniff 또는 CSP 헤더가 있음', async () => {
+      const response = await anonymousGet(app, '/');
+      const nosniff = response.headers.get('x-content-type-options') === 'nosniff';
+      const csp = Boolean(response.headers.get('content-security-policy'));
+      return `HTTP ${response.status}, nosniff ${nosniff ? '있음' : '없음'}, CSP ${csp ? '있음' : '없음'}`;
+    }),
+    { attackId: 'owner_read_write', expected: `학생 A·B 각자 자기 메모의 GET·POST·PUT·DELETE ${route} 요청이 허용됨`,
+      observed: '미실행 (로그인 토큰이 필요해 자동 점검하지 않음, 두 계정으로 브라우저에서 직접 확인)' },
+    { attackId: 'cross_owner_access', expected: `학생 B 토큰으로 학생 A 메모의 GET·PUT·DELETE ${route}/:id 요청이 404`,
+      observed: '미실행 (두 계정의 로그인 토큰이 필요해 자동 점검하지 않음)' },
+    await checkIdentity(config, app),
+  ];
+}
+
 export async function runAttackChecks(config) {
   if (config.step === 1) return firstStepChecks(config, appUrl(config));
   if (config.step === 2) return secondStepChecks(config, appUrl(config));
   if (config.step === 3) return thirdStepChecks(config, appUrl(config));
+  if (config.step === 4) return fourthStepChecks(config, appUrl(config));
   throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
 }

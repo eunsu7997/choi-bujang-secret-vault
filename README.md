@@ -1,9 +1,17 @@
-# BYTE BACK 방어전 R5 · 3단계
+# BYTE BACK 방어전 R5 · 4단계
 
 - 운영: https://choi-bujang-secret-vault-livid.vercel.app/
 - 저장소: https://github.com/eunsu7997/choi-bujang-secret-vault
 
-## 현재 운영 상태 · 2026-10-27
+## 4단계 · 로그인해도 내 자료만 보이게 합니다 (2026-10-27)
+
+- API: GET/POST /api/notes, GET/PUT/DELETE /api/notes/:id. 검증된 JWT의 (owner_kind, owner_id)로만 조회·추가·수정·삭제하며, 본문·URL의 소유자 값은 거절합니다. 남의 메모와 없는 메모는 같은 404입니다. 학생·심판 모두 자기 메모만 쓰기 가능(`writesEnabled: true`)합니다.
+- DB(`supabase/notes-step4-*.sql`): 원본 가상 메모 4건은 학생 A, 공개 가능한 시험 메모 1건은 학생 B 소유입니다. notes에 RLS·FORCE RLS, anon 권한 없음, authenticated는 SELECT·INSERT·UPDATE·DELETE만, 네 정책 모두 `auth.uid() = owner_id and owner_kind = 'student'`입니다. 서버는 service_role로 접속해 RLS를 우회하므로 서버 소유권 필터가 1차 방어입니다.
+- 적용 순서: notes-step4-check.sql(1~3 구간) → notes-step4-owners.sql → notes-step4-rls.sql → notes-step4-check.sql 전체. 되돌리기: notes-step4-rls-rollback.sql. 백업 스키마는 읽기만 합니다.
+- 검증: `node --test --test-concurrency=1 test/*.test.mjs` 로컬 97건(96 PASS/1 SKIP, 가상 키·가상 DB). SQL은 로컬 Postgres 모의 환경에서 실행 확인. 실제 Supabase 적용은 PM 보고 기준이며, 운영 A/B 브라우저 확인과 정상 심판 JWT 시험은 별도 기록 전까지 미검증입니다.
+- `npm run bundle`의 4단계 자기 점검은 비로그인 401 JSON·위조 토큰·anon 키 Data API·첫 화면 보안 헤더·/aleph.json 등 8개를 실제 요청하고, 로그인 토큰이 필요한 2개는 미실행으로 남깁니다. 심판 판정이 아닙니다.
+
+## 이전 기록 · 3단계 운영 상태 (2026-10-27)
 
 운영 기준은 `3a3c7a2`입니다. 이 분리 작업본은 공식 3단계 API 계약 수정 후보이며 아직 배포하지 않았습니다. 아래 과거 실운영 검증은 새 API 형식의 운영 검증을 대체하지 않습니다.
 
@@ -39,7 +47,7 @@ PM 직접 로그인 세션에서 별도로 실행한 A/B 시험은 원본 로그
 
 ## 실행과 DB 보존
 
-의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step3, Supabase identityProvider, allowedRoutes=[/api/notes, /api/notes/:id]입니다.
+의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step4, Supabase identityProvider, allowedRoutes=[/api/notes, /api/notes/:id]입니다.
 
 환경변수 이름은 SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_PUBLISHABLE_KEY입니다. 값은 코드·대화·로그에 적지 않습니다. 현재 DB에서 notes.sql/백업/소유권 SQL을 처음부터 재실행하지 않습니다. 새 환경의 최초 구축은 `docs/DB_OWNERSHIP_RUNBOOK.md`를 현재 스키마와 PM 승인에 대조해 수행합니다.
 

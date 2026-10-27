@@ -175,7 +175,7 @@ export default createNotesHandler({
     const client = supabaseFromEnv();
     return client && supabaseNotesStore(client);
   },
-  // Actual student JWT isolation and genuine expiration were verified before this release.
-  // Official judge authentication remains unverified; retain its write gate.
-  writesEnabled: 'students-only',
+  // 4단계: 학생·심판 모두 자기 소유 메모만 읽고 쓰며, 격리는 (owner_kind, owner_id)로 유지합니다.
+  // 심판도 자기 메모를 만들어야 "타인 메모 접근 차단" 시험이 성립하므로 쓰기를 엽니다.
+  writesEnabled: true,
 });
