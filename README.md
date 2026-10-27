@@ -8,8 +8,16 @@
 - API: GET/POST /api/notes, GET/PUT/DELETE /api/notes/:id. 검증된 JWT의 (owner_kind, owner_id)로만 조회·추가·수정·삭제하며, 본문·URL의 소유자 값은 거절합니다. 남의 메모와 없는 메모는 같은 404입니다. 학생·심판 모두 자기 메모만 쓰기 가능(`writesEnabled: true`)합니다.
 - DB(`supabase/notes-step4-*.sql`): 원본 가상 메모 4건은 학생 A, 공개 가능한 시험 메모 1건은 학생 B 소유입니다. notes에 RLS·FORCE RLS, anon 권한 없음, authenticated는 SELECT·INSERT·UPDATE·DELETE만, 네 정책 모두 `auth.uid() = owner_id and owner_kind = 'student'`입니다. 서버는 service_role로 접속해 RLS를 우회하므로 서버 소유권 필터가 1차 방어입니다.
 - 적용 순서: notes-step4-check.sql(1~3 구간) → notes-step4-owners.sql → notes-step4-rls.sql → notes-step4-check.sql 전체. 되돌리기: notes-step4-rls-rollback.sql. 백업 스키마는 읽기만 합니다.
-- 검증: `node --test --test-concurrency=1 test/*.test.mjs` 로컬 97건(96 PASS/1 SKIP, 가상 키·가상 DB). SQL은 로컬 Postgres 모의 환경에서 실행 확인. 실제 Supabase 적용은 PM 보고 기준이며, 운영 A/B 브라우저 확인과 정상 심판 JWT 시험은 별도 기록 전까지 미검증입니다.
+- 경로별 메서드: `GET /api/notes`(본인 목록), `POST /api/notes`(본인 생성, 입력 {id?,title,body} → 201 {id}), `GET /api/notes/:id`(본인 단건 {id,title,body}), `PUT /api/notes/:id`(본인 수정, 입력 {title,body}), `DELETE /api/notes/:id`(본인 삭제 → 204). `aleph.config.json`의 allowedRoutes는 공식 starter 점검과 호환되도록 경로 문자열만 둡니다.
+- 운영 DB 적용(2026-10-27): owners·RLS SQL을 운영 Supabase에 적용했고, 읽기 전용 질의로 RLS/FORCE RLS, 정책 4개, authenticated S/I/U/D만, anon 권한 없음, 원본 4건 A 소유·B 시험 메모 1건·백업 4건을 확인했습니다. 원본 4건의 owner_id는 공식 카드에 따라 A로 바뀌었으므로 백업과 owner_id가 다른 것이 정상입니다(제목·본문·생성시각은 일치). authenticated 역할로 보이는 행은 A 4건·B 1건(읽기만 확인)입니다.
+- 검증: `node --test --test-concurrency=1 test/*.test.mjs` 로컬 97건(96 PASS/1 SKIP, 가상 키·가상 DB). RLS 쓰기 차단(INSERT·UPDATE·DELETE)은 로컬 Postgres 모의 환경에서만 확인했고 운영 DB 쓰기 실측은 하지 않았습니다. 정상 심판 JWT 운영 시험과 공식 채점은 미검증입니다.
 - `npm run bundle`의 4단계 자기 점검은 비로그인 401 JSON·위조 토큰·anon 키 Data API·첫 화면 보안 헤더·/aleph.json 등 8개를 실제 요청하고, 로그인 토큰이 필요한 2개는 미실행으로 남깁니다. 심판 판정이 아닙니다.
+
+## 보안 기록 (4단계 범위 밖, 승인 전 변경 안 함)
+
+- POST에 이미 있는 UUID를 넣으면 소유자와 관계없이 409입니다. 메모 내용은 읽거나 덮어쓸 수 없지만, 무작위 UUID(v4)를 맞힌 경우 존재 여부는 추측할 수 있습니다. 공식 선택 UUID 계약을 지키는 최소 대응 후보는 ①현재 유지(추측 비용이 2^122 수준) 또는 ②타인 소유 충돌을 본인 충돌과 같은 409로만 응답(현재도 동일)하는 것이며, 추가 변경은 하지 않았습니다.
+- Supabase 경고: `public.rls_auto_enable()`은 SECURITY DEFINER(소유자 postgres, search_path=pg_catalog)이고 anon·authenticated에 EXECUTE가 있습니다. 반환형이 event_trigger이고 이벤트 트리거 `ensure_rls`로만 실행되어 직접 호출·REST RPC 경로는 확인되지 않았습니다. 권한 회수(`revoke execute ... from anon, authenticated`)는 PM 승인 후 별도 검토합니다.
+- 그 밖의 Supabase 진단: backup 테이블 정책 없음(RLS·FORCE 켜짐, 공개 권한 회수 상태), 유출 비밀번호 보호 비활성화. 4단계 필수 항목은 아닙니다.
 
 ## 이전 기록 · 3단계 운영 상태 (2026-10-27)
 
