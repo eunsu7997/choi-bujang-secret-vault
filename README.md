@@ -1,7 +1,32 @@
-# BYTE BACK 방어전 R5 · 11단계
+# BYTE BACK 방어전 R5 · 12단계
 
 - 운영: https://choi-bujang-secret-vault-livid.vercel.app/
 - 저장소: https://github.com/eunsu7997/choi-bujang-secret-vault
+
+## 12단계 · 탈환 작전실을 완성합니다 (2026-11-01)
+
+### 제작 1 · 탈환 작전실 화면 (`/ops.html`)
+- 판정기 규칙(`RULE_IDS`)과 고정 가상 요청 판정, 탐지 사건(정상·120건·121건), 회수 상태(이 계정 기기 승인 승인·대기·취소 수, 반 엔진 회수 연결은 미실행), 복구 버전(안전 정책 사본 버전, B 메모 복원 사본 수, 감사 기록 수·마지막 동작)을 보여 줍니다.
+- 요약은 `GET /api/ops/summary`(로그인 필수, 브라우저는 승인된 기기만)에서 받습니다. 판정기·탐지기 값은 요청 때마다 서버가 학생 코드(`src/decider.mjs`, `src/detect.mjs`)를 실행한 결과이고, 회수·복구 값은 DB의 개수·상태만 읽습니다. 메모 본문·토큰·사용자 번호는 응답과 화면에 없고, 읽지 못한 값은 "확인 불가"로 둡니다.
+
+### 제작 2 · 실측 표와 41종 구분
+- 같은 시험 정의(`src/ops-catalog.mjs`, 빌드 때 `public/ops-catalog.js`로 복사)를 화면과 절차가 함께 씁니다. 운영 API 요청 13종(정상 3: 첫 화면·manifest·aleph.json / 금지 10: data.json, 비로그인 메모 목록·항목·수정, 위조 토큰, 비로그인 공지·관리 공지·복구·기기 상태·작전실 요약)은 로그인 정보 없이 실제로 보내고, 학생 판정기 14종·탐지기 3종은 실제로 실행하며, 정책 사본은 해시를 다시 검증합니다.
+- 표에는 단계, 정상·금지, 시험, 기대, 실제 응답, 결과, 요청 ID(보낼 때 만든 UUID, `x-request-id`), 서버 ID(Vercel `x-vercel-id`, Vercel 요청 기록과 대조), 확인 시각이 남습니다. 연결 자체가 실패하면 통과·실패로 세지 않고 미실행입니다.
+- 절차: `npm run ops:probe` → 같은 표를 출력하고 `artifacts/ops-results.json`(Git 제외)에 저장합니다.
+- 공식 41종: 6~12단계 25종은 카드의 괴물 이름과 관련 시험으로 상태를 계산합니다(관련 시험이 하나라도 기대와 다르면 실측 실패, 일부만 실행했거나 로그인 토큰·반 엔진이 필요한 부분이 남으면 부분 실측, 모두 실행해 기대대로면 실측 통과, 하나도 실행 못 하면 미실행). 1~5단계 16종은 이 저장소에 공식 이름 기록이 없어 "이름 미기록 · 미실행"입니다. 이 구분은 공식 판정이 아니며, 화면의 "기대대로" 표시를 통과 근거로 쓰지 않습니다.
+
+### 제작 3 · 설치·실행·중지·복구 안내 (검사 기준: 11단계 보완 `d2808ed` + 이 12단계 저장점)
+출처 구분: **제공 엔진 = ALEPH SDP 엔진**(반에서 제공·운영, 이 저장소에 엔진 코드 없음, 사용만 함 — 기기 인증서·mTLS·요청 서명·회수 연결·판정기 호출 담당). **학생 몫 = 이 저장소 전체**(판정기·탐지기·자료실 서버 함수·화면·SQL). 비밀값(Supabase 서버 키, 계정 비밀번호, 토큰, 기기 쿠키 값)은 저장소·제출 묶음에 넣지 않고 Vercel 환경변수와 각자 브라우저에만 둡니다.
+
+| 구성 | 설치 | 실행·확인 | 중지 | 복구 |
+|---|---|---|---|---|
+| 학생 판정기 `src/decider.mjs` | `npm ci` | 엔진이 `decide(request)` 호출. 로컬: `npm run decider:test`, `npm run fixture:7` | 엔진 쪽 판정기 연결 해제(엔진 운영자) | `npm run policy:verify` → 차이 있으면 `git checkout <검사 커밋> -- src/decider.mjs`, 시험 사본은 `npm run policy:restore -- <폴더> --yes` |
+| 학생 탐지 규칙 `src/detect.mjs` | `npm ci` | 엔진이 `detect(events)` 호출. 로컬: `npm run detect:test` | 엔진 쪽 탐지 연결 해제(엔진 운영자) | `git checkout <검사 커밋> -- src/detect.mjs` 후 `npm run detect:test` |
+| 접속 앱(설치형 웹앱) `public/` | 자료실 주소를 브라우저로 열고 "홈 화면에 추가" | 로그인 → 기기 승인 요청 → `supabase/device-approve.sql`로 승인 → 「승인 다시 확인」 | 로그아웃, 앱 삭제, 기기 승인 취소(`status='revoked'`) | 새 기기로 다시 승인 요청·승인. 서비스 워커는 오프라인 안내만 보관하므로 강력 새로고침(Ctrl+Shift+R)으로 최신 화면 |
+| 자료실(Vercel + Supabase) | Vercel에 저장소 연결, 환경변수 3개 입력, SQL은 `docs/DB_OWNERSHIP_RUNBOOK.md` 순서 + 10단계 `notes-step10-restore-point.sql` + 11단계 `device-approvals.sql` | `git push` → 자동 배포 → `/aleph.json` 커밋 확인 → `npm run ops:probe`, `npm run bundle` | Vercel 프로젝트 배포 일시 중지 또는 이전 배포로 롤백 | 코드: `git revert`(reset --hard 금지) 후 push. B 메모: `POST /api/restore/b4b4b4b4-0000-4000-8000-000000000001`. 확인: `notes-step10-check.sql` |
+
+- 재현 순서: ① `git clone` → `npm ci` ② `npm run decider:test`·`npm run detect:test`·`npm run policy:verify` ③ `node --test --test-concurrency=1 test/*.test.mjs` ④ 배포 후 `/aleph.json`의 커밋이 검사 커밋과 같은지 확인 ⑤ `npm run ops:probe`와 `/ops.html`의 표가 같은 기대·실제를 보이는지 대조 ⑥ `npm run bundle`.
+- 미실행으로 남는 것: 로그인 토큰이 필요한 교차 사용자 요청, 반 엔진의 mTLS·요청 서명·회수 재시도, 1~5단계 공식 공격 16종(이름 미기록). 결과를 꾸미지 않습니다.
 
 ## 11단계 · 나만의 접속 앱을 완성합니다 (2026-11-01)
 
@@ -138,7 +163,7 @@ PM 직접 로그인 세션에서 별도로 실행한 A/B 시험은 원본 로그
 
 ## 실행과 DB 보존
 
-의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step11, restoreRoute=/api/restore/b4b4b4b4-0000-4000-8000-000000000001, Supabase identityProvider, allowedRoutes=[GET·PUT·DELETE /api/notes/:id, GET /api/notices, GET /api/notices/:id](판정기가 허용하는 경로만), originalApiUrl=원본 notes REST 경로입니다.
+의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step12, restoreRoute=/api/restore/b4b4b4b4-0000-4000-8000-000000000001, Supabase identityProvider, allowedRoutes=[GET·PUT·DELETE /api/notes/:id, GET /api/notices, GET /api/notices/:id](판정기가 허용하는 경로만), originalApiUrl=원본 notes REST 경로입니다.
 
 환경변수 이름은 SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_PUBLISHABLE_KEY입니다. 값은 코드·대화·로그에 적지 않습니다. 현재 DB에서 notes.sql/백업/소유권 SQL을 처음부터 재실행하지 않습니다. 새 환경의 최초 구축은 `docs/DB_OWNERSHIP_RUNBOOK.md`를 현재 스키마와 PM 승인에 대조해 수행합니다.
 

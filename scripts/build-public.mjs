@@ -1,4 +1,4 @@
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { deploymentIdentity } from './deployment-identity.mjs';
 
@@ -17,6 +17,10 @@ console.log('공개 data.json을 만들지 않습니다. 메모는 /api/notes에
 await rm(resolve(root, 'public', 'auth-config.json'), { force: true });
 await rm(resolve(root, 'public', 'vendor'), { recursive: true, force: true });
 console.log('화면에 Supabase 공개 키와 브라우저 SDK를 내보내지 않습니다. 로그인은 /api/auth 서버 함수가 처리합니다.');
+
+// 12단계: 탈환 작전실 화면이 Node 절차와 같은 시험 목록을 쓰도록 공통 목록을 복사합니다(목록만, 비밀값 없음).
+await copyFile(resolve(root, 'src', 'ops-catalog.mjs'), resolve(root, 'public', 'ops-catalog.js'));
+console.log('탈환 작전실 시험 목록을 public/ops-catalog.js로 복사했습니다.');
 
 if (!local) {
   const identity = deploymentIdentity(process.env, config);

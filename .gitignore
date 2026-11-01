@@ -8,3 +8,4 @@ supabase/*.local.sql
 data.json
 public/auth-config.json
 public/vendor/
+public/ops-catalog.js

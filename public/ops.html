@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>탈환 작전실 | BYTE BACK 자료실</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#101a28">
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; background: #101a28; color: #ecf4ff; }
+    main { max-width: 1100px; margin: 0 auto; padding: 36px 20px 64px; }
+    .eyebrow { color: #8ad8df; font-size: 14px; font-weight: 700; letter-spacing: .08em; }
+    h1 { margin: 12px 0; font-size: clamp(28px, 6vw, 42px); }
+    h2 { margin: 34px 0 10px; font-size: 22px; }
+    p, li { line-height: 1.6; color: #bfd0e5; }
+    .notice { margin: 18px 0; padding: 14px 16px; border: 1px solid #d0b073; border-radius: 12px; color: #ffe9b8; background: #5a4a2a44; }
+    .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+    .card { border: 1px solid #51667c; border-radius: 12px; padding: 14px 16px; background: #1a2a3d; }
+    .card strong { display: block; margin-bottom: 6px; }
+    .wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { border-bottom: 1px solid #33465c; padding: 7px 8px; text-align: left; vertical-align: top; }
+    th { color: #8ad8df; position: sticky; top: 0; background: #101a28; }
+    td.mono { font-family: ui-monospace, monospace; font-size: 12px; word-break: break-all; }
+    .ok { color: #8fe3a2; } .bad { color: #ff9aa9; } .none { color: #ffd98a; }
+    a { color: #8ad8df; }
+    button { font: inherit; font-weight: 700; padding: 8px 14px; border: 0; border-radius: 10px; background: #8ad8df; color: #101a28; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">BYTE BACK · 12단계 탈환 작전실</div>
+    <h1>탈환 작전실</h1>
+    <p>판정기·탐지기·회수·복구의 <b>실제 결과</b>만 보여 줍니다. 이 화면의 "통과" 표시는 공식 판정이 아니며, 공식 결과는 심판 판정입니다. 메모 본문은 표시하지 않습니다.</p>
+    <p><a href="/">← 자료실로 돌아가기</a> · <button id="rerun" type="button">다시 실측</button></p>
+
+    <h2>판정·탐지·회수·복구 요약</h2>
+    <p id="summary-status" role="status">서버 요약을 확인하는 중입니다.</p>
+    <div class="grid" id="summary-cards"></div>
+
+    <h2>실측 표 (정상·금지 요청 · 기대 · 실제 · 요청 ID · 확인 시각)</h2>
+    <p>운영 API 요청은 이 브라우저가 로그인 정보 없이(또는 서명이 틀린 토큰으로) 지금 보낸 실제 요청입니다. 학생 판정기·탐지기 행은 서버가 지금 학생 코드를 실행한 결과입니다(로그인한 승인 기기에서만 보임). 서버 ID는 Vercel 요청 기록(x-vercel-id)과 대조할 수 있는 값입니다.</p>
+    <div class="wrap"><table>
+      <thead><tr><th>단계</th><th>구분</th><th>시험</th><th>어디서</th><th>기대</th><th>실제</th><th>결과</th><th>요청 ID</th><th>서버 ID</th><th>확인 시각</th></tr></thead>
+      <tbody id="probe-rows"></tbody>
+    </table></div>
+
+    <h2>공식 41종 상태 (실측과 미실행 구분)</h2>
+    <p id="attack-tally" role="status"></p>
+    <p class="notice">로그인 토큰이 필요한 공격, 반 엔진(ALEPH SDP 엔진)의 mTLS·요청 서명·회수 연결이 필요한 공격은 이 화면에서 실행하지 않으며 "미실행" 또는 "부분 실측"으로 남깁니다. 1~5단계 16종은 이 저장소에 공식 이름 기록이 없어 "이름 미기록 · 미실행"입니다.</p>
+    <div class="wrap"><table>
+      <thead><tr><th>번호</th><th>단계</th><th>괴물</th><th>공격</th><th>상태</th><th>근거·남은 부분</th></tr></thead>
+      <tbody id="attack-rows"></tbody>
+    </table></div>
+  </main>
+  <script type="module">
+    import { ATTACKS, FORGED_BEARER, HTTP_PROBES, attackStatus, tally } from '/ops-catalog.js';
+
+    const cell = (text, className) => { const td = document.createElement('td'); td.textContent = text ?? '—'; if (className) td.className = className; return td; };
+    const row = cells => { const tr = document.createElement('tr'); tr.append(...cells); return tr; };
+    const mark = ok => (ok === true ? ['기대대로', 'ok'] : ok === false ? ['기대와 다름', 'bad'] : ['미실행', 'none']);
+
+    // 로그인 정보 없이(credentials: omit) 실제 요청을 보냅니다. 연결 자체가 실패하면 결과로 세지 않고 미실행입니다.
+    async function runHttp(probe) {
+      const requestId = crypto.randomUUID();
+      const at = new Date().toISOString();
+      const headers = { 'x-request-id': requestId };
+      if (probe.auth === 'forged') headers.Authorization = FORGED_BEARER;
+      if (probe.body) headers['Content-Type'] = 'application/json';
+      try {
+        const response = await fetch(probe.path, { method: probe.method, headers, credentials: 'omit', cache: 'no-store', redirect: 'manual',
+          body: probe.body ? JSON.stringify(probe.body) : undefined });
+        return { ...probe, label: `${probe.label} (${probe.method} ${probe.path})`, where: '운영 API 실제 요청', expected: probe.expect.join('/'),
+          actual: `HTTP ${response.status}`, ok: probe.expect.includes(response.status), requestId, serverId: response.headers.get('x-vercel-id'), at };
+      } catch {
+        return { ...probe, label: `${probe.label} (${probe.method} ${probe.path})`, where: '운영 API 실제 요청', expected: probe.expect.join('/'),
+          actual: '미실행 (연결 실패)', ok: undefined, requestId, serverId: null, at };
+      }
+    }
+
+    async function loadSummary() {
+      try {
+        const response = await fetch('/api/ops/summary', { cache: 'no-store', credentials: 'same-origin' });
+        if (response.status === 401) return { reason: '로그인하지 않아 서버 요약을 볼 수 없습니다. 자료실에서 로그인한 뒤 다시 여세요.' };
+        if (response.status === 403) return { reason: '이 기기가 승인되지 않아 서버 요약을 볼 수 없습니다. 자료실에서 기기 승인을 마치세요.' };
+        if (!response.ok) return { reason: `서버 요약을 받지 못했습니다(HTTP ${response.status}).` };
+        return { data: await response.json() };
+      } catch { return { reason: '서버 요약 요청이 실패했습니다.' }; }
+    }
+
+    function card(title, lines) {
+      const div = document.createElement('div');
+      div.className = 'card';
+      const strong = document.createElement('strong');
+      strong.textContent = title;
+      div.append(strong);
+      for (const line of lines) { const p = document.createElement('p'); p.textContent = line; p.style.margin = '4px 0'; div.append(p); }
+      return div;
+    }
+
+    function renderSummary(summary) {
+      const box = document.querySelector('#summary-cards');
+      const status = document.querySelector('#summary-status');
+      box.replaceChildren();
+      if (!summary.data) { status.textContent = summary.reason; return; }
+      const d = summary.data;
+      const show = value => (value === null || value === undefined ? '확인 불가' : String(value));
+      const deciderRows = d.local.filter(item => !item.id.startsWith('detect_'));
+      status.textContent = `서버 기준 ${show(d.generatedAt)} · 단계 ${show(d.step)} · 배포 커밋 ${show(d.commit)}`;
+      box.append(
+        card('판정기 규칙', [`규칙 ${d.rules.length}개: ${d.rules.join(', ')}`, `고정 가상 요청 ${deciderRows.length}건 중 기대대로 ${deciderRows.filter(i => i.ok).length}건`]),
+        card('탐지 사건', d.detection.map(item => `${item.label} → ${item.actual}`)),
+        card('회수 상태', [d.revocation.engineLink, d.revocation.devices
+          ? `이 계정 기기: 승인 ${d.revocation.devices.approved} · 대기 ${d.revocation.devices.pending} · 취소 ${d.revocation.devices.revoked}`
+          : '이 계정 기기 승인 기록: 확인 불가']),
+        card('복구 버전', [`안전 정책 사본 버전 ${show(d.restore.policyVersion)}`, `B 메모 복원 사본 ${show(d.restore.restorePoints)}건 · 감사 기록 ${show(d.restore.auditRows)}건`,
+          d.restore.lastAudit ? `마지막 감사: ${d.restore.lastAudit.action} (${d.restore.lastAudit.at})` : '마지막 감사: 없음 또는 확인 불가']),
+      );
+    }
+
+    async function run() {
+      document.querySelector('#probe-rows').replaceChildren(row([cell('실측 중…')]));
+      const [summary, http] = await Promise.all([loadSummary(), Promise.all(HTTP_PROBES.map(runHttp))]);
+      renderSummary(summary);
+      const rows = [...http, ...(summary.data ? summary.data.local : [])];
+      document.querySelector('#probe-rows').replaceChildren(...rows.map(r => {
+        const [text, cls] = mark(r.ok);
+        return row([cell(`${r.stage}`), cell(r.kind), cell(r.label), cell(r.where), cell(r.expected), cell(r.actual), cell(text, cls),
+          cell(r.requestId, 'mono'), cell(r.serverId, 'mono'), cell(r.at, 'mono')]);
+      }));
+      const results = Object.fromEntries(rows.filter(r => typeof r.ok === 'boolean').map(r => [r.id, { ok: r.ok }]));
+      const counts = tally(results);
+      document.querySelector('#attack-tally').textContent = `이 화면 기준(공식 판정 아님) · 실측 통과 ${counts['실측 통과']} · 부분 실측 ${counts['부분 실측']} · 실측 실패 ${counts['실측 실패']} · 미실행 ${counts['미실행']} (합계 ${ATTACKS.length})`;
+      document.querySelector('#attack-rows').replaceChildren(...ATTACKS.map(attack => {
+        const { status, detail } = attackStatus(attack, results);
+        const cls = status === '실측 통과' ? 'ok' : status === '실측 실패' ? 'bad' : 'none';
+        return row([cell(attack.id), cell(`${attack.stage}`), cell(attack.name), cell(attack.attack), cell(status, cls), cell(detail)]);
+      }));
+    }
+
+    document.querySelector('#rerun').addEventListener('click', run);
+    run();
+  </script>
+</body>
+</html>

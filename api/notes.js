@@ -8,9 +8,12 @@ import { ACCESS_COOKIE, readCookies, sameOrigin } from '../src/session-cookie.mj
 import { authAction, authClientsFromEnv, createAuthHandler } from '../src/auth-handler.mjs';
 import { NOTICES, instructorIdsFromEnv, isInstructor, resourceId, zoneRoute } from '../src/zones.mjs';
 import { supabaseRestorer } from '../src/restore.mjs';
+import { RULE_IDS } from '../src/decider.mjs';
+import { runLocalProbes } from '../src/ops-local.mjs';
 import { deviceAction, deviceCode, deviceCookie, deviceHash, newDeviceSecret, readDeviceSecret, supabaseDeviceStore } from '../src/device-approval.mjs';
 
 const appConfig = createRequire(import.meta.url)('../aleph.config.json');
+const policyManifest = createRequire(import.meta.url)('../backup/policy/manifest.json');
 const MAX_NOTES = 50;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const ALLOWED_METHODS = 'GET, POST, PUT, DELETE';
@@ -136,6 +139,75 @@ async function handleDevice(action, method, owner, request, getDeviceStore, resp
   }
 }
 
+// 12단계: 탈환 작전실 요약. 판정기·탐지기는 지금 서버에서 학생 코드를 실행한 결과, 회수·복구는 DB의 개수·상태만 돌려줍니다.
+// 메모 본문·토큰·사용자 번호는 담지 않습니다. 확인하지 못한 값은 null(화면에는 "확인 불가")입니다.
+export function opsAction(request) {
+  let url;
+  try { url = new URL(request.url ?? '/', 'https://notes.internal'); } catch { return null; }
+  if (/^\/api\/ops\/summary\/?$/u.test(url.pathname)) return 'summary';
+  if (/^\/api\/ops(\/|$)/u.test(url.pathname)) return 'invalid';
+  if (['/api/notes', '/api/notes/'].includes(url.pathname) && (url.searchParams.has('ops') || request.query?.ops !== undefined)) {
+    const values = [...url.searchParams.getAll('ops'), ...(typeof request.query?.ops === 'string' ? [request.query.ops] : [])];
+    return values.length && values.every(value => value === 'summary') ? 'summary' : 'invalid';
+  }
+  return null;
+}
+
+async function handleOps(action, method, owner, getOpsInfo, response) {
+  if (action !== 'summary') return response.status(404).json({ error: 'NOT_FOUND' });
+  if (method !== 'GET') {
+    response.setHeader('Allow', 'GET');
+    return response.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
+  }
+  let info = null;
+  try { info = await getOpsInfo(owner); } catch (error) {
+    console.error('ops_info_failed', typeof error?.code === 'string' ? error.code : 'unknown');
+    info = null;
+  }
+  const local = await runLocalProbes();
+  return response.status(200).json({
+    generatedAt: new Date().toISOString(),
+    step: appConfig.step,
+    commit: typeof process.env.VERCEL_GIT_COMMIT_SHA === 'string' ? process.env.VERCEL_GIT_COMMIT_SHA.slice(0, 12) : null,
+    rules: [...RULE_IDS],
+    local,
+    detection: local.filter(item => item.id.startsWith('detect_')).map(({ id, label, actual, ok }) => ({ id, label, actual, ok })),
+    revocation: { engineLink: '미실행 (반 엔진 회수 연결은 이 저장소에서 시험하지 않음)', devices: info?.devices ?? null },
+    restore: { policyVersion: typeof policyManifest?.version === 'string' ? policyManifest.version : null,
+      restorePoints: info?.restorePoints ?? null, auditRows: info?.auditRows ?? null, lastAudit: info?.lastAudit ?? null },
+  });
+}
+
+async function countRows(client, table, build = query => query) {
+  const { count, error } = await build(client.from(table).select('*', { count: 'exact', head: true }));
+  if (error) throw Object.assign(new Error('ops'), { code: error.code });
+  return count ?? 0;
+}
+
+export function supabaseOpsInfo(client) {
+  return async owner => {
+    const safe = async run => { try { return await run(); } catch { return null; } };
+    const devices = await safe(async () => {
+      const { data, error } = await client.from('device_approvals').select('status').eq('owner_kind', owner.kind).eq('user_id', owner.id);
+      if (error) throw error;
+      const out = { approved: 0, pending: 0, revoked: 0 };
+      for (const row of data ?? []) if (row.status in out) out[row.status] += 1;
+      return out;
+    });
+    const lastAudit = await safe(async () => {
+      const { data, error } = await client.from('notes_restore_audit').select('action, at').order('seq', { ascending: false }).limit(1).maybeSingle();
+      if (error) throw error;
+      return data ? { action: String(data.action), at: String(data.at) } : null;
+    });
+    return {
+      devices,
+      restorePoints: await safe(() => countRows(client, 'notes_restore_point')),
+      auditRows: await safe(() => countRows(client, 'notes_restore_audit')),
+      lastAudit,
+    };
+  };
+}
+
 // 브라우저 로그인(쿠키)으로 들어온 자료 요청은 승인된 기기에서만 받습니다. 확인할 수 없으면 거부합니다(실패 시 닫힘).
 async function deviceApproved(owner, request, getDeviceStore) {
   const secret = readDeviceSecret(request);
@@ -197,7 +269,7 @@ function handleZone(route, method, owner, instructorIds, response) {
   return response.status(501).json({ error: 'NOTICE_STORE_NOT_CONNECTED' });
 }
 
-export function createNotesHandler({ getVerifier, getStore, writesEnabled = false, getInstructorIds = () => new Set(), getRestorer = () => null, getDeviceStore = () => null }) {
+export function createNotesHandler({ getVerifier, getStore, writesEnabled = false, getInstructorIds = () => new Set(), getRestorer = () => null, getDeviceStore = () => null, getOpsInfo = async () => null }) {
   if (typeof getVerifier !== 'function' || typeof getStore !== 'function') throw new TypeError('invalid_notes_handler');
   return async function handler(request, response) {
     response.setHeader('Cache-Control', 'no-store');
@@ -235,6 +307,10 @@ export function createNotesHandler({ getVerifier, getStore, writesEnabled = fals
     if (cookieToken && !(await deviceApproved(owner, request, getDeviceStore))) {
       return response.status(403).json({ error: 'DEVICE_NOT_APPROVED' });
     }
+
+    // 12단계: 탈환 작전실 요약(로그인 + 브라우저는 승인된 기기)
+    const ops = opsAction(request);
+    if (ops) return handleOps(ops, method, owner, getOpsInfo, response);
 
     // 8단계: 공지·관리 경로는 메모와 다른 구역으로 처리합니다. 화면 메뉴나 본문의 role은 보지 않습니다.
     const zone = zoneRoute(request);
@@ -317,6 +393,10 @@ const notesHandler = createNotesHandler({
   getDeviceStore: () => {
     const client = supabaseFromEnv();
     return client && supabaseDeviceStore(client);
+  },
+  getOpsInfo: async owner => {
+    const client = supabaseFromEnv();
+    return client ? supabaseOpsInfo(client)(owner) : null;
   },
 });
 

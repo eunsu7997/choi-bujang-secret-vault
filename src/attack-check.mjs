@@ -423,6 +423,29 @@ async function eleventhStepChecks(config, app) {
   ];
 }
 
+// 12단계: 탈환 작전실과 같은 시험(scripts/ops-probe.mjs)을 실제로 실행한 결과입니다. 연결 실패·미실행은 통과로 세지 않습니다.
+async function twelfthStepChecks(config, app) {
+  const { runOpsProbe } = await import('../scripts/ops-probe.mjs');
+  const report = await runOpsProbe({ base: app });
+  const http = report.rows.filter(row => row.where === '운영 API 실제 요청').map(row => ({
+    attackId: row.id, expected: `${row.stage}단계 ${row.kind} · ${row.label} → ${row.expected}`,
+    observed: `${row.actual} · 요청ID ${row.requestId}${row.serverId ? ` · 서버ID ${row.serverId}` : ''} · ${row.at}`,
+  }));
+  const local = report.rows.filter(row => row.where !== '운영 API 실제 요청');
+  return [
+    ...http,
+    await observe('ops_page_served', '/ops.html 탈환 작전실이 열리고 메모 본문 표시·innerHTML을 쓰지 않음', async () => {
+      const response = await fetch(new URL('/ops.html', app), { redirect: 'error', signal: AbortSignal.timeout(10000) });
+      const html = response.ok ? await response.text() : '';
+      return `HTTP ${response.status}, 작전실 ${html.includes('탈환 작전실') ? '있음' : '없음'}, innerHTML ${/innerHTML/u.test(html) ? '사용' : '없음'}`;
+    }),
+    { attackId: 'ops_local_student_code', expected: '학생 판정기·탐지기 고정 가상 요청이 모두 기대대로',
+      observed: `로컬 실행: ${local.filter(row => row.ok === true).length}/${local.length}건 기대대로` },
+    { attackId: 'ops_41_status', expected: '공식 41종을 실측 통과·부분 실측·실측 실패·미실행으로 구분(통과 꾸밈 없음, 공식 판정 아님)',
+      observed: Object.entries(report.tally).map(([label, value]) => `${label} ${value}`).join(' · ') },
+  ];
+}
+
 export async function runAttackChecks(config) {
   if (config.step === 1) return firstStepChecks(config, appUrl(config));
   if (config.step === 2) return secondStepChecks(config, appUrl(config));
@@ -435,5 +458,6 @@ export async function runAttackChecks(config) {
   if (config.step === 9) return ninthStepChecks(config, appUrl(config));
   if (config.step === 10) return tenthStepChecks(config, appUrl(config));
   if (config.step === 11) return eleventhStepChecks(config, appUrl(config));
+  if (config.step === 12) return twelfthStepChecks(config, appUrl(config));
   throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
 }

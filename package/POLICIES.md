@@ -6,6 +6,7 @@
 |---|---|---|---|
 | device_registered | 6 | 미등록 기기의 자료실 요청 | test/step6-decider.test.mjs, npm run decider:test |
 | step_up_required | 7 | 새벽·낯선 네트워크·지역 변경·대량 접근이 2개 이상 겹친 접속(추가 확인) | test/step7-step-up.test.mjs, npm run fixture:7 |
+| ops room (탈환 작전실) | 12 | 실행하지 않은 시험을 통과로 꾸미기, 메모 본문 노출(요약은 개수·상태만) | test/step12-ops.test.mjs, npm run ops:probe |
 | device_approval (화면 기기 승인) | 11 | 승인되지 않은 기기의 브라우저 자료 요청(403), 승인 버튼·본문 값만으로 권한 얻기 | test/step11-device-app.test.mjs, test/ui-security.test.mjs |
 | restore_point (복원 경로) | 10 | 변조·삭제된 B 시험 메모 한 건을 비공개 사본으로 복원, A·비로그인의 복원 호출 거부 | test/step10-restore.test.mjs, supabase/notes-step10-check.sql |
 | policy snapshot | 10 | 판정기 규칙·allowedRoutes·DB 정책 변조를 해시로 감지하고 검증한 사본으로 복원 | npm run policy:verify, npm run policy:drill |
