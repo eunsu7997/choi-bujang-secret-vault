@@ -1,0 +1,23 @@
+[
+  {
+    "name": "large_unusual_transfer",
+    "condition": "실제 전송량 50MB 이상과 신규 목적지·시간 외·이례 포트·전체 외부 복사·압축 연속 전송·반복 5회 중 하나가 겹침. 출발·목적지 확인 및 수준 10 이상.",
+    "evidence": "MITRE T1048: 기존 명령 통로와 다른 프로토콜·네트워크 위치를 사용한 자료 반출. 프로토콜 미상인 경보는 비정상 반출 정황으로만 분류.",
+    "source": "https://attack.mitre.org/techniques/T1048/",
+    "minBytes": 50000000,
+    "minCount": 5,
+    "minLevel": 10
+  },
+  {
+    "name": "c2_data_transfer",
+    "condition": "명령 통로를 통한 큰 파일 전송이며 50MB 이상, 반복 5회 이상, 수준 10 이상이면 차단 후보.",
+    "evidence": "MITRE T1041: 기존 명령 제어 통로를 이용해 자료를 전송.",
+    "source": "https://attack.mitre.org/techniques/T1041/"
+  },
+  {
+    "name": "unconfirmed_transfer",
+    "condition": "소량 신규 목적지·일시적 전송량 증가·압축 준비·실패·명령 통로 소량 자료는 알림. 크기만으로 차단하지 않음.",
+    "evidence": "MITRE T1041·T1048의 전송 행위는 목적지·통로·실제 전송 등 문맥 확인이 필요하며 크기만으로 악용을 단정하지 않음.",
+    "source": "https://attack.mitre.org/techniques/T1048/"
+  }
+]

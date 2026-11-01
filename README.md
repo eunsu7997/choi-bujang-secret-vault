@@ -3,6 +3,13 @@
 - 운영: https://choi-bujang-secret-vault-livid.vercel.app/
 - 저장소: https://github.com/eunsu7997/choi-bujang-secret-vault
 
+## 보너스 xdr-06 저장점 · 자료 빼돌리기를 잡아 냅니다 (2026-11-01)
+
+- `xdr/exfiltration/`에 안전한 경보 읽기, MITRE 근거 패턴, 외부 의존성 없는 단독 판단, 목적지별 만료 거부 연결, `result.json`을 완성했습니다. [사용법·연결 조건](xdr/exfiltration/README.md).
+- 재실행: `npm run xdr:run -- exfiltration` → `node xdr/exfiltration/respond.mjs --fixture` → `node --test test/exfiltration.test.mjs`. 제공 가상 경보 30건은 **block 10 · alert 10 · record 10**, 검토한 정상 경보 10건의 차단은 0건입니다.
+- 연결 재연: 공격 요청 10건 거부, 비차단 사건 요청 20건 허용, 다른 목적지·다른 계정·만료 후 요청 각각 30건 허용. 출발 IP·계정·목적지가 모두 맞을 때만 추가 거부합니다. 원본 경보와 기존 판정 규칙·공식 요청 계약·DB는 보존합니다.
+- 반출 전용 시험 7건 통과. 실제 엔진 연결·배포·심판 제출은 미실행이며 공식 점수로 표시하지 않습니다. 로그·상태·시험 산출물은 Git에서 제외합니다.
+
 ## 보너스 xdr-04 저장점 · 몰래 심어진 프로그램 탐지 (2026-11-01)
 
 - 제작 1~5를 [persistence 안내](xdr/persistence/README.md)에 정리했습니다. 경보 읽기·근거 패턴·단독 판단·기기 단위 임시 격리·실행 결과를 포함합니다.
