@@ -1,8 +1,9 @@
 // 12단계 제작 2: 1~11단계의 정상·금지 요청을 실제로 실행해 한 표로 남기는 절차입니다.
 //   npm run ops:probe            운영 주소(aleph.config.json publicAppUrl)로 실제 요청 + 학생 판정기·탐지기·정책 사본 실행
 //   결과: 화면 표 출력 + artifacts/ops-results.json(Git 제외). 로그인 토큰이 필요한 시험은 실행하지 않고 미실행으로 남깁니다.
+//   12단계 보완: 공개 HTTPS GET·HEAD만 보냅니다. 쓰기 요청(PUT·POST 등)이 필요한 점검은 보내지 않고 not_run으로 남깁니다.
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ATTACKS, FORGED_BEARER, HTTP_PROBES, attackStatus, tally } from '../src/ops-catalog.mjs';
 import { runLocalProbes } from '../src/ops-local.mjs';
@@ -10,9 +11,15 @@ import { verifySnapshot, readLivePolicy } from './policy-backup.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 
+const READ_METHODS = new Set(['GET', 'HEAD']);
+
 export async function runHttpProbe(probe, base, fetchImpl = fetch) {
   const requestId = randomUUID();
   const at = new Date().toISOString();
+  if (!READ_METHODS.has(probe.method)) {
+    return { id: probe.id, stage: probe.stage, kind: probe.kind, label: `${probe.label} (${probe.method} ${probe.path})`, where: '운영 API 실제 요청',
+      expected: probe.expect.join('/'), actual: 'not_run', ok: undefined, requestId, serverId: null, at, notRun: true };
+  }
   const headers = { 'x-request-id': requestId };
   if (probe.auth === 'forged') headers.authorization = FORGED_BEARER;
   if (probe.body) headers['content-type'] = 'application/json';
@@ -47,7 +54,7 @@ export async function runOpsProbe({ base, fetchImpl = fetch } = {}) {
   for (const probe of HTTP_PROBES) {
     const row = await runHttpProbe(probe, base, fetchImpl);
     // 연결 자체가 안 되면 결과가 아니라 미실행으로 둡니다(통과·실패 어느 쪽으로도 세지 않음).
-    if (!row.failed) rows.push(row);
+    if (!row.failed) rows.push(row);  // not_run 행은 ok가 없어 통과·실패로 세지 않습니다.
     else rows.push({ ...row, ok: undefined, actual: `미실행 (${row.actual})` });
   }
   rows.push(...await runLocalProbes(), policyProbe());
@@ -57,14 +64,14 @@ export async function runOpsProbe({ base, fetchImpl = fetch } = {}) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
-  const config = JSON.parse(await readFile(resolve(root, 'aleph.config.json'), 'utf8'));
+  const config = JSON.parse(readFileSync(resolve(root, 'aleph.config.json'), 'utf8'));
   const report = await runOpsProbe({ base: config.publicAppUrl });
   for (const row of report.rows) {
-    const mark = row.ok === true ? '통과' : row.ok === false ? '실패' : '미실행';
+    const mark = row.ok === true ? '통과' : row.ok === false ? '실패' : row.notRun ? 'not_run' : '미실행';
     process.stdout.write(`[${mark}] ${row.stage}단계 ${row.kind} · ${row.label} · 기대 ${row.expected} · 실제 ${row.actual} · 요청ID ${row.requestId}${row.serverId ? ` · 서버ID ${row.serverId}` : ''} · ${row.at}\n`);
   }
   process.stdout.write(`\n공식 41종(이 절차 기준, 공식 판정 아님): ${Object.entries(report.tally).map(([k, v]) => `${k} ${v}`).join(' · ')}\n`);
-  await mkdir(resolve(root, 'artifacts'), { recursive: true });
-  await writeFile(resolve(root, 'artifacts', 'ops-results.json'), `${JSON.stringify(report, null, 2)}\n`);
+  mkdirSync(resolve(root, 'artifacts'), { recursive: true });
+  writeFileSync(resolve(root, 'artifacts', 'ops-results.json'), `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write('결과: artifacts/ops-results.json (Git에 올리지 않음)\n');
 }

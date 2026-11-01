@@ -429,7 +429,7 @@ async function twelfthStepChecks(config, app) {
   const report = await runOpsProbe({ base: app });
   const http = report.rows.filter(row => row.where === '운영 API 실제 요청').map(row => ({
     attackId: row.id, expected: `${row.stage}단계 ${row.kind} · ${row.label} → ${row.expected}`,
-    observed: `${row.actual} · 요청ID ${row.requestId}${row.serverId ? ` · 서버ID ${row.serverId}` : ''} · ${row.at}`,
+    observed: row.notRun ? 'not_run' : `${row.actual} · 요청ID ${row.requestId}${row.serverId ? ` · 서버ID ${row.serverId}` : ''} · ${row.at}`,
   }));
   const local = report.rows.filter(row => row.where !== '운영 API 실제 요청');
   return [

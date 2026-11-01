@@ -27,6 +27,7 @@
 
 - 재현 순서: ① `git clone` → `npm ci` ② `npm run decider:test`·`npm run detect:test`·`npm run policy:verify` ③ `node --test --test-concurrency=1 test/*.test.mjs` ④ 배포 후 `/aleph.json`의 커밋이 검사 커밋과 같은지 확인 ⑤ `npm run ops:probe`와 `/ops.html`의 표가 같은 기대·실제를 보이는지 대조 ⑥ `npm run bundle`.
 - 12단계 보완: `vercel.json`의 서버 함수 포함 파일에 `backup/policy/manifest.json`을 더했고(빠지면 서버 함수가 시작하지 못해 모든 API가 오류였음), 파일이 없어도 서버는 멈추지 않고 정책 사본 버전만 "확인 불가"로 둡니다. `npm run ops:probe` 실측에서 운영 API 응답이 기대와 달랐던 것을 보고 찾은 문제입니다.
+- 12단계 보완(심판 S12_BUNDLE_UNSUPPORTED 반영): 심판 격리 환경은 `node:fs`·`node:path`·`node:url`·`node:child_process`·`node:crypto`와 공개 HTTPS GET·HEAD만 허용합니다. `scripts/policy-backup.mjs`의 `node:os`(임시 폴더)를 환경변수로 바꾸고, `scripts/ops-probe.mjs`는 `node:fs`만 쓰며 GET·HEAD만 보냅니다. 쓰기 점검(비로그인 PUT 메모·PUT 관리 공지·POST 복구)은 보내지 않고 `not_run`으로 남깁니다(작전실 화면은 브라우저에서 같은 요청을 실제로 보내 확인).
 - 미실행으로 남는 것: 로그인 토큰이 필요한 교차 사용자 요청, 반 엔진의 mTLS·요청 서명·회수 재시도, 1~5단계 공식 공격 16종(이름 미기록). 결과를 꾸미지 않습니다.
 
 ## 11단계 · 나만의 접속 앱을 완성합니다 (2026-11-01)

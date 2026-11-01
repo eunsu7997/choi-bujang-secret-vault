@@ -8,11 +8,12 @@
 //   node scripts/policy-backup.mjs drill               임시 시험 사본에서 침공 흉내 → 차이 → 복원 → 재확인
 import { createHash } from 'node:crypto';
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// 12단계 보완: 심판 격리 환경에서 쓸 수 없는 node:os 대신 환경변수로 임시 폴더 위치를 정합니다.
+const TEMP_BASE = process.env.TMPDIR || process.env.TEMP || process.env.TMP || '/tmp';
 export const SNAPSHOT_DIR = join(ROOT, 'backup', 'policy');
 // 안전 정책 항목: 이름 → 원본 위치. allowedRoutes는 설정 파일에서 그 값만 떼어 저장합니다.
 export const POLICY_ITEMS = Object.freeze([
@@ -125,7 +126,7 @@ export const TAMPER = Object.freeze({
 
 export function makeTestCopy(dir = SNAPSHOT_DIR) {
   const { texts } = verifySnapshot(dir);
-  const testDir = mkdtempSync(join(tmpdir(), 'policy-test-'));
+  const testDir = mkdtempSync(join(TEMP_BASE, 'policy-test-'));
   for (const [name, text] of Object.entries(texts)) writeFileSync(join(testDir, name), text);
   writeFileSync(join(testDir, 'audit.log'), `${new Date(0).toISOString()} drill-start (기존 감사 이력 예시)\n`);
   writeFileSync(join(testDir, 'other-service.rules'), 'notices: GET only (다른 서비스 규칙 예시, 복원 대상 아님)\n');

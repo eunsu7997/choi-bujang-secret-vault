@@ -47,6 +47,8 @@ test('local probes run the real student decider and detector with expected resul
 
 test('ops:probe procedure records real responses, request IDs and server IDs; connection failures stay 미실행', async () => {
   const fakeFetch = async (url, init) => {
+    // 심판 격리 환경처럼 GET·HEAD 말고는 보내면 안 됩니다.
+    assert.ok(['GET', 'HEAD'].includes(init.method), `${init.method} must not be sent`);
     const path = new URL(url).pathname;
     const status = path === '/' || path === '/manifest.webmanifest' || path === '/aleph.json' ? 200 : path === '/data.json' ? 404 : 401;
     return { status, headers: new Map([['x-vercel-id', `icn1::${init.headers['x-request-id'].slice(0, 8)}`]]) };
@@ -54,12 +56,16 @@ test('ops:probe procedure records real responses, request IDs and server IDs; co
   const report = await runOpsProbe({ base: 'https://example.test/', fetchImpl: fakeFetch });
   const http = report.rows.filter(r => r.where === '운영 API 실제 요청');
   assert.equal(http.length, catalog.HTTP_PROBES.length);
-  assert.ok(http.every(r => r.ok === true && r.serverId && r.serverId.endsWith(r.requestId.slice(0, 8))));
+  const reads = http.filter(r => !r.notRun);
+  const writes = http.filter(r => r.notRun);
+  assert.equal(writes.length, catalog.HTTP_PROBES.filter(p => !['GET', 'HEAD'].includes(p.method)).length);
+  assert.ok(writes.every(r => r.actual === 'not_run' && r.ok === undefined));
+  assert.ok(reads.every(r => r.ok === true && r.serverId && r.serverId.endsWith(r.requestId.slice(0, 8))));
   assert.equal(report.attacks.length, 41);
   assert.equal(report.tally['실측 실패'], 0);
   assert.ok(report.tally['미실행'] >= 16);
   const down = await runOpsProbe({ base: 'https://example.test/', fetchImpl: async () => { throw new TypeError('down'); } });
-  assert.ok(down.rows.filter(r => r.where === '운영 API 실제 요청').every(r => r.ok === undefined && /^미실행/u.test(r.actual)));
+  assert.ok(down.rows.filter(r => r.where === '운영 API 실제 요청').every(r => r.ok === undefined && /^(미실행|not_run)/u.test(r.actual)));
 });
 
 test('ops summary API: login required, approved device for browser, header path works, no memo bodies', async () => {
@@ -171,5 +177,13 @@ test('server function bundle includes every file api/notes.js reads at runtime',
   const source = await read('api/notes.js');
   for (const match of source.matchAll(/createRequire\(import\.meta\.url\)\('\.\.\/([^']+)'\)/gu)) {
     assert.ok(include.includes(match[1]), `${match[1]} must be in includeFiles`);
+  }
+});
+
+test('bundle path uses only modules allowed in the judge sandbox', async () => {
+  const allowed = /^node:(fs|path|url|child_process|crypto)$/u;
+  for (const file of ['scripts/bundle.mjs', 'src/attack-check.mjs', 'scripts/ops-probe.mjs', 'scripts/policy-backup.mjs', 'src/ops-local.mjs', 'src/ops-catalog.mjs', 'scripts/fixture-7.mjs', 'src/decider.mjs', 'src/detect.mjs']) {
+    const source = await read(file);
+    for (const match of source.matchAll(/from '(node:[^']+)'/gu)) assert.match(match[1], allowed, `${file}: ${match[1]}`);
   }
 });
