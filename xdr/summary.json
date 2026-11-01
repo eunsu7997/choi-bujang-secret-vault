@@ -62,8 +62,8 @@
       "moduleKey": "privilege",
       "counts": {
         "block": 9,
-        "alert": 6,
-        "record": 11
+        "alert": 8,
+        "record": 9
       },
       "replay": {
         "attacksDenied": 9,
@@ -89,8 +89,8 @@
   ],
   "totals": {
     "block": 53,
-    "alert": 50,
-    "record": 55
+    "alert": 52,
+    "record": 53
   },
   "productionConnected": false,
   "officialJudgment": false

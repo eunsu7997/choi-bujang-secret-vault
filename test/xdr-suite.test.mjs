@@ -108,6 +108,23 @@ test('웹 주입: 실제 구문·인코딩·반복 문턱 및 정상 수업 단�
   }
 });
 
+test('웹 주입 검수: 교육·조회·명시적 부정과 잘못된 수준은 자동 차단하지 않음', async () => {
+  const { decide } = await import('../xdr/web-injection/decide.mjs');
+  const input = description => ({ rule: { level: 12, description },
+    data: { srcip: '192.0.2.200', url: '/docs/lesson', count: '100' } });
+  for (const description of ['SQL 구문을 설명하는 수업 공지를 읽기만 했습니다.',
+    '명령 구분자 표기를 설명하는 문서를 조회만 했습니다.', 'SQL 구문은 사용하지 않습니다.']) {
+    assert.equal(decide(input(description)).action, 'record');
+    const real = input(description);
+    real.data.url = '/files?path=../../example';
+    assert.equal(decide(real).action, 'block', '실제 요청 증거는 설명의 안전 문구로 우회하지 못함');
+  }
+  const invalid = input('웹 요청 검사');
+  invalid.rule.level = 999;
+  invalid.data.url = '/files?path=../../example';
+  assert.equal(decide(invalid).action, 'alert');
+});
+
 test('지속 실행·권한·반출: 강한 결합 신호가 빠지면 차단하지 않음', async () => {
   const ps = (await import('../xdr/persistence/decide.mjs')).decide;
   const pv = (await import('../xdr/privilege/decide.mjs')).decide;

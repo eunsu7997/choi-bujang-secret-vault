@@ -3,12 +3,13 @@
 const PATTERNS = [
   {
     "name": "sql_injection",
-    "condition": "요청 인자의 UNION SELECT·논리식·이어 붙인 SQL 또는 센서가 보고한 SQL 삽입 구문. 같은 출발지에서 3회 이상 반복하고 수준 10 이상일 때 차단 후보.",
+    "condition": "요청 인자의 UNION SELECT·논리식·이어 붙인 SQL 또는 센서가 보고한 SQL 삽입 구문. 읽기·교육·명시적 부정 문구는 설명 증거에서 제외. 같은 출발지에서 3회 이상 반복하고 수준 10~16일 때 차단 후보.",
     "evidence": "MITRE T1190의 공개 웹 앱 악용 범주이며, SQL 명령에 입력을 섞는 구체 형태는 CWE-89에 근거.",
     "source": "https://attack.mitre.org/techniques/T1190/",
     "detailSource": "https://cwe.mitre.org/data/definitions/89.html",
     "minCount": 3,
-    "minLevel": 10
+    "minLevel": 10,
+    "maxLevel": 16
   },
   {
     "name": "script_injection",
@@ -85,7 +86,7 @@ export function decide(alert) {
   if (!object(alert?.data) || !object(alert?.rule)) return answer(0, 'no_supported_pattern');
   const d = alert.data, description = text(alert.rule.description);
   const reported = description.split(/[.!?]/u).filter(clause =>
-    !/(?:구문|표식|표기|삽입|공격).*(?:없|아닙|아니)|(?:no|not).*(?:sql|script|injection|traversal)/iu.test(clause)).join(' ');
+    !/읽기만|조회만|(?:설명|교육|수업).*(?:문서|공지|예제)|(?:구문|표식|표기|삽입|공격).*(?:없|아닙|아니|않)|(?:no|not).*(?:sql|script|injection|traversal)/iu.test(clause)).join(' ');
   // 경보 설명은 Wazuh 규칙이 생성한 신호입니다. 입력에 포함된 공격 지시를 실행하지 않습니다.
   const input = requestTexts(d);
   const sql = /\bunion\s+(?:all\s+)?select\b|['"]\s*(?:or|and)\s+['"\d]+\s*=\s*['"\d]+|;\s*(?:drop|delete|insert|update)\b/iu.test(input)
@@ -101,7 +102,8 @@ export function decide(alert) {
   if (index !== -1) {
     const p = PATTERNS[0];
     const repeated = number(d.count) >= p.minCount;
-    return answer(validIp(d.srcip) && repeated && number(alert.rule.level) >= p.minLevel ? 0.95 : 0.7, PATTERNS[index].name);
+    const level = number(alert.rule.level);
+    return answer(validIp(d.srcip) && repeated && level >= p.minLevel && level <= p.maxLevel ? 0.95 : 0.7, PATTERNS[index].name);
   }
   if (/따옴표|주입처럼|이상한\s*검색|구분\s*문자/u.test(description)
       || /['"]|\.\.[/\\]|<\s*script\b/iu.test(input)) return answer(0.55, PATTERNS[4].name);

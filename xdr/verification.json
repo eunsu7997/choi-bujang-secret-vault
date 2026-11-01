@@ -3,12 +3,12 @@
   "scope": "local-fixtures-and-isolated-adapters",
   "counts": {
     "block": 53,
-    "alert": 50,
-    "record": 55
+    "alert": 52,
+    "record": 53
   },
   "tests": {
-    "total": 229,
-    "passed": 228,
+    "total": 231,
+    "passed": 230,
     "failed": 0,
     "skipped": 1
   },
@@ -31,8 +31,8 @@
     "xdr/brute-force/patterns.json": "31086417457725882034d8fbe842d7fed955622e600edd0a82d4f1e45d410170",
     "xdr/brute-force/read-alerts.mjs": "3bfd1affe4b80d919c40e038d321073c603d5393e0c372a28068f61d7ee00abb",
     "xdr/brute-force/respond.mjs": "038ad6236e9e2c90c54e96bebb5d7e4f6fa7c66be66103d6b505a885bf969af4",
-    "xdr/web-injection/decide.mjs": "1a039ea2e202a1021d95a76551178d0360a040c45c58f5c8dff0e45a62458e49",
-    "xdr/web-injection/patterns.json": "1310696ee1e6cf814afc19480d665ce82c22544a787fa58e1e0cf75caacac378",
+    "xdr/web-injection/decide.mjs": "d70738637613481159024fc1bfdf89b8012eb92deca134fabfcf23297d6205b7",
+    "xdr/web-injection/patterns.json": "9a4a66c53ba09aecb4542c16a9546acf815368e71a759bc22a437c03e042ee3e",
     "xdr/web-injection/read-alerts.mjs": "3a16f514521e18cc0d8c45d00a670cd9269ea89b4c8ff228ba502c8cb52d5b25",
     "xdr/web-injection/respond.mjs": "fc8efb3324a7dd733c1af0eb1eced6bfe68ce62ab472eecf4844fcad521beef4",
     "xdr/known-cve/decide.mjs": "fa6ce1044ab48e7650be092042455d233078ef1c212470796dd2d76f2b525e08",
@@ -43,7 +43,7 @@
     "xdr/persistence/patterns.json": "415ff21b2bd2c1218251ea914e43ae1068332f11e420d75308d17ce8cc432d93",
     "xdr/persistence/read-alerts.mjs": "c5d0f3dfed3ea6fc065cf6069c19f346bfda9527922af0241c38ccf046cf38a3",
     "xdr/persistence/respond.mjs": "7d1e9e7bff9e51abc5927af29337016c754386a36be83e491bf6cb4b33afc8b8",
-    "xdr/privilege/decide.mjs": "91d3be96f888afb53c29c0d2d323b9ee813edc2ac5421136e504601789919dcc",
+    "xdr/privilege/decide.mjs": "977e952f1f621fb5f9e4a5cebb06582bf939d197085d1c41a75a0d8926a08f2b",
     "xdr/privilege/patterns.json": "05cbde1b2269ba3a0f8230f2b424913e2219b5e01c26b6ea8b58a1be8087d59e",
     "xdr/privilege/read-alerts.mjs": "57adfeda18affdb128be5b64723b4af8ba475cad88ef47d64dfe93f3e79118df",
     "xdr/privilege/respond.mjs": "9772337d37dad4ea8a8596ab3afa5c01fb84a08b25913398727b45c9e0c13335",

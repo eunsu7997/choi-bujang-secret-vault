@@ -1,12 +1,13 @@
 [
   {
     "name": "sql_injection",
-    "condition": "요청 인자의 UNION SELECT·논리식·이어 붙인 SQL 또는 센서가 보고한 SQL 삽입 구문. 같은 출발지에서 3회 이상 반복하고 수준 10 이상일 때 차단 후보.",
+    "condition": "요청 인자의 UNION SELECT·논리식·이어 붙인 SQL 또는 센서가 보고한 SQL 삽입 구문. 읽기·교육·명시적 부정 문구는 설명 증거에서 제외. 같은 출발지에서 3회 이상 반복하고 수준 10~16일 때 차단 후보.",
     "evidence": "MITRE T1190의 공개 웹 앱 악용 범주이며, SQL 명령에 입력을 섞는 구체 형태는 CWE-89에 근거.",
     "source": "https://attack.mitre.org/techniques/T1190/",
     "detailSource": "https://cwe.mitre.org/data/definitions/89.html",
     "minCount": 3,
-    "minLevel": 10
+    "minLevel": 10,
+    "maxLevel": 16
   },
   {
     "name": "script_injection",
