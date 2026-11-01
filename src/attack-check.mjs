@@ -436,8 +436,9 @@ async function twelfthStepChecks(config, app) {
   const report = await runOpsProbe({ base: app });
   const http = report.rows.filter(row => row.where === '운영 API 실제 요청').map(row => ({
     attackId: row.id, expected: `${row.stage}단계 ${row.kind} · ${row.label} → ${row.expected}`,
-    observed: row.notRun || !Number.isInteger(row.status) ? 'not_run'
-      : `HTTP ${row.status} · ${row.method} ${new URL(row.url).pathname} · attackId ${row.id} · 요청ID ${row.requestId}${row.serverId ? ` · 서버ID ${row.serverId}` : ''} · ${row.at}`,
+    // 심판이 이 13개 점검의 요청 기록을 확인하지 못했습니다.
+    // 로컬 응답을 심판 기록으로 대신하지 않고, 연결 검증 전에는 상태·ID를 제출하지 않습니다.
+    observed: 'not_run',
   }));
   const local = report.rows.filter(row => row.where !== '운영 API 실제 요청');
   return [
