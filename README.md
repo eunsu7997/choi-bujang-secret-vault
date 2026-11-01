@@ -1,7 +1,18 @@
-# BYTE BACK 방어전 R5 · 10단계
+# BYTE BACK 방어전 R5 · 11단계
 
 - 운영: https://choi-bujang-secret-vault-livid.vercel.app/
 - 저장소: https://github.com/eunsu7997/choi-bujang-secret-vault
+
+## 11단계 · 나만의 접속 앱을 완성합니다 (2026-11-01)
+
+- 제작 1(설치형 웹앱): 지금 배포 중인 자료실 화면(`public/index.html`)에 `manifest.webmanifest`(앱 이름 「BYTE BACK 최부장의 비밀 자료실」, standalone, 아이콘 `icon.svg`)를 연결하고, 오프라인 안내(화면 상단 표시 + `offline.html`)를 넣었습니다. 서비스 워커(`sw.js`)는 오프라인 안내 페이지만 보관하고 `/api/*`·로그인 응답은 저장하지 않습니다. 화면에는 "앱을 설치(홈 화면에 추가)했다고 기기 확인이 끝난 것은 아닙니다"라고 표시합니다. 따로 설치하는 접속 프로그램은 만들지 않았습니다.
+- 제작 2(기기 승인 흐름): 브라우저 로그인(쿠키)으로 들어온 자료 요청은 서버가 이 기기를 승인된 기기로 확인한 뒤에만 처리하고, 그 전에는 403 `DEVICE_NOT_APPROVED`로 자료를 주지 않습니다. 화면은 이때 메모 목록·쓰기 대신 기기 승인 화면(승인 코드, 「이 기기 승인 요청」, 「승인 다시 확인」)을 보여 줍니다.
+  - 기기 식별값: 서버가 만든 무작위 값을 HttpOnly·Secure·SameSite=Strict 쿠키 `__Host-vault_device`로만 주고받습니다. 화면 코드는 읽을 수 없고, localStorage·IndexedDB에는 기기 키·토큰을 넣지 않습니다. DB(`public.device_approvals`)에는 SHA-256 해시만 두고, 화면에는 해시 앞 8자리 승인 코드만 보입니다.
+  - 승인: 「승인 요청」 버튼은 대기(pending) 행만 만듭니다(서버 권한은 읽기·추가뿐, 추가 행은 트리거로 pending만 허용). 본문에 `approved`를 넣어도 무시됩니다. 승인은 계정 주인이 Supabase SQL Editor에서 `supabase/device-approve.sql`(내 이메일 + 화면의 승인 코드, 대기 중인 한 대만)로만 합니다. 취소는 같은 조건으로 `revoked`.
+  - 경로: `GET /api/device/status`, `POST /api/device/request`(`vercel.json` rewrite → `api/notes.js`). 둘 다 로그인 필수(비로그인 401), 쿠키 POST는 같은 출처만.
+  - 기존 결과 유지: 비로그인 401, 위조 토큰 401, 소유자 검사(남의 메모 404), 공지·관리·복원 경로는 그대로입니다. Authorization 헤더(심판·자동 점검) 경로의 기기 확인은 반 엔진·판정기(6단계 `device_registered`)가 맡고, 서버 화면 경로의 기기 승인과는 따로입니다. 기기 기록을 확인할 수 없으면(테이블 없음 등) 거부합니다.
+- 운영 적용(학생이 직접): ① Supabase SQL Editor에서 `supabase/device-approvals.sql` 실행(마지막 확인 결과 `rls_forced=true`, `public_grants=0`, `server_grants=INSERT,SELECT`) ② 배포된 화면에서 로그인 → 「이 기기 승인 요청」 → 승인 코드 확인 ③ `supabase/device-approve.sql`의 이메일·코드 두 값을 SQL Editor에서만 바꿔 실행 ④ 화면에서 「승인 다시 확인」 → 기존 메모 화면이 열림. ①을 하기 전에는 브라우저 화면에서 메모가 열리지 않습니다(실패 시 닫힘).
+- 확인: `node --test --test-concurrency=1 test/*.test.mjs`(`test/step11-device-app.test.mjs`: 승인 전 403·버튼은 pending만·승인 뒤 정상·다른 기기 차단·헤더 경로 유지·저장소 오류 시 거부·manifest/서비스 워커 검사, `test/ui-security.test.mjs`: 실제 화면 코드에서 승인 전 자료 없음·승인 뒤 기존 화면). 로그인 쿠키가 필요한 운영 확인(승인 전 자료 없음, 승인한 기기의 기존 화면)은 **미실행**이며 위 운영 적용 순서로 직접 확인합니다. 서명 위조(서명 뒤 경로·본문 변경, 서명 없는 요청)는 반 엔진의 기기 서명 검증 범위로, 이 저장소에서 실측하지 않았습니다.
 
 ## 10단계 · 백업에서 자료실을 되살립니다 (2026-11-01)
 
@@ -126,7 +137,7 @@ PM 직접 로그인 세션에서 별도로 실행한 A/B 시험은 원본 로그
 
 ## 실행과 DB 보존
 
-의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step10, restoreRoute=/api/restore/b4b4b4b4-0000-4000-8000-000000000001, Supabase identityProvider, allowedRoutes=[GET·PUT·DELETE /api/notes/:id, GET /api/notices, GET /api/notices/:id](판정기가 허용하는 경로만), originalApiUrl=원본 notes REST 경로입니다.
+의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step11, restoreRoute=/api/restore/b4b4b4b4-0000-4000-8000-000000000001, Supabase identityProvider, allowedRoutes=[GET·PUT·DELETE /api/notes/:id, GET /api/notices, GET /api/notices/:id](판정기가 허용하는 경로만), originalApiUrl=원본 notes REST 경로입니다.
 
 환경변수 이름은 SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_PUBLISHABLE_KEY입니다. 값은 코드·대화·로그에 적지 않습니다. 현재 DB에서 notes.sql/백업/소유권 SQL을 처음부터 재실행하지 않습니다. 새 환경의 최초 구축은 `docs/DB_OWNERSHIP_RUNBOOK.md`를 현재 스키마와 PM 승인에 대조해 수행합니다.
 

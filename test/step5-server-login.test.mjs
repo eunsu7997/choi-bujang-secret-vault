@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { createNotesHandler, supabaseNotesStore } from '../api/notes.js';
 import { authAction, createAuthHandler, createLimiter } from '../src/auth-handler.mjs';
 import { ACCESS_COOKIE, REFRESH_COOKIE, readCookies, sameOrigin } from '../src/session-cookie.mjs';
+import { DEVICE_COOKIE, deviceHash } from '../src/device-approval.mjs';
 import { call, fakeSupabase, judgeBearer, studentBearer, verify } from './helpers/auth-fixture.mjs';
 
 const userA = 'aaaaaaaa-1111-4111-8111-111111111111';
@@ -121,8 +122,14 @@ test('logout revokes the server session and always clears both cookies', async (
 
 test('notes API accepts the login cookie, keeps ownership, and refuses cross-origin cookie writes', async () => {
   const db = fakeSupabase();
-  const handler = createNotesHandler({ getVerifier: () => verify, getStore: () => supabaseNotesStore(db), writesEnabled: true });
-  const a = { cookie: cookieHeader({ [ACCESS_COOKIE]: await raw(userA) }) };
+  // 11단계부터 쿠키(브라우저) 경로는 서버가 승인한 기기에서만 자료를 줍니다. 이 시험은 승인된 기기로 진행합니다.
+  const deviceSecret = 'd'.repeat(43);
+  const approvedStore = { get: async (owner, hash) => (hash === deviceHash(deviceSecret) ? 'approved' : null) };
+  const handler = createNotesHandler({ getVerifier: () => verify, getStore: () => supabaseNotesStore(db), writesEnabled: true,
+    getDeviceStore: () => approvedStore });
+  const unapproved = await call(handler, { method: 'GET', url: '/api/notes', headers: { cookie: cookieHeader({ [ACCESS_COOKIE]: await raw(userA) }) } });
+  assert.deepEqual([unapproved.status, unapproved.body], [403, { error: 'DEVICE_NOT_APPROVED' }]);
+  const a = { cookie: cookieHeader({ [ACCESS_COOKIE]: await raw(userA), [DEVICE_COOKIE]: deviceSecret }) };
   const created = await call(handler, { method: 'POST', url: '/api/notes', headers: { ...sameSite, ...a }, body: { title: 'A', body: '' } });
   assert.equal(created.status, 201);
   assert.equal(db.rows[0].owner_id, userA);
@@ -132,7 +139,7 @@ test('notes API accepts the login cookie, keeps ownership, and refuses cross-ori
     assert.deepEqual([r.status, r.body], [403, { error: 'CROSS_ORIGIN_REJECTED' }]);
   }
   // B의 쿠키로는 A 메모가 보이지 않습니다.
-  const b = { cookie: cookieHeader({ [ACCESS_COOKIE]: await raw(userB) }) };
+  const b = { cookie: cookieHeader({ [ACCESS_COOKIE]: await raw(userB), [DEVICE_COOKIE]: deviceSecret }) };
   assert.equal((await call(handler, { method: 'GET', url: `/api/notes/${created.body.id}`, headers: b })).status, 404);
   // Authorization 헤더가 있으면 쿠키로 대신하지 않습니다(잘못된 헤더 + 정상 쿠키 = 401).
   const r = await call(handler, { method: 'GET', url: '/api/notes', headers: { ...a, authorization: 'Bearer bad.token.value' } });

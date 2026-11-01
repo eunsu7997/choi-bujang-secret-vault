@@ -8,6 +8,7 @@ import { ACCESS_COOKIE, readCookies, sameOrigin } from '../src/session-cookie.mj
 import { authAction, authClientsFromEnv, createAuthHandler } from '../src/auth-handler.mjs';
 import { NOTICES, instructorIdsFromEnv, isInstructor, resourceId, zoneRoute } from '../src/zones.mjs';
 import { supabaseRestorer } from '../src/restore.mjs';
+import { deviceAction, deviceCode, deviceCookie, deviceHash, newDeviceSecret, readDeviceSecret, supabaseDeviceStore } from '../src/device-approval.mjs';
 
 const appConfig = createRequire(import.meta.url)('../aleph.config.json');
 const MAX_NOTES = 50;
@@ -103,6 +104,51 @@ function zoneDenied(response, status, reason, resource) {
   return response.status(status).json({ error: reason });
 }
 
+// 11단계: 기기 승인 상태 확인·요청. 승인 자체는 계정 주인이 서버(DB)에서만 합니다.
+async function handleDevice(action, method, owner, request, getDeviceStore, response) {
+  if (action === 'invalid') return response.status(404).json({ error: 'NOT_FOUND' });
+  const wantMethod = action === 'status' ? 'GET' : 'POST';
+  if (method !== wantMethod) {
+    response.setHeader('Allow', wantMethod);
+    return response.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
+  }
+  let store = null;
+  try { store = getDeviceStore(); } catch { store = null; }
+  if (!store) return response.status(503).json({ error: 'DEVICE_APPROVAL_UNAVAILABLE' });
+  let secret = readDeviceSecret(request);
+  try {
+    if (action === 'status') {
+      if (!secret) return response.status(200).json({ state: 'none', approved: false });
+      const hash = deviceHash(secret);
+      const state = (await store.get(owner, hash)) ?? 'none';
+      return response.status(200).json({ state, approved: state === 'approved', code: deviceCode(hash) });
+    }
+    if (!secret) {
+      secret = newDeviceSecret();
+      response.setHeader('Set-Cookie', deviceCookie(secret));
+    }
+    const hash = deviceHash(secret);
+    const state = (await store.request(owner, hash)) ?? 'pending';
+    return response.status(200).json({ state, approved: state === 'approved', code: deviceCode(hash) });
+  } catch (error) {
+    console.error('device_check_failed', typeof error?.code === 'string' ? error.code : 'unknown');
+    return response.status(503).json({ error: 'DEVICE_APPROVAL_UNAVAILABLE' });
+  }
+}
+
+// 브라우저 로그인(쿠키)으로 들어온 자료 요청은 승인된 기기에서만 받습니다. 확인할 수 없으면 거부합니다(실패 시 닫힘).
+async function deviceApproved(owner, request, getDeviceStore) {
+  const secret = readDeviceSecret(request);
+  if (!secret) return false;
+  try {
+    const store = getDeviceStore();
+    return Boolean(store) && (await store.get(owner, deviceHash(secret))) === 'approved';
+  } catch (error) {
+    console.error('device_check_failed', typeof error?.code === 'string' ? error.code : 'unknown');
+    return false;
+  }
+}
+
 // 10단계 제작 3: POST /api/restore/:id — 비공개 사본에서 메모 한 건만 복원합니다.
 // 사본 주인(학생 B)이나 심판만 허용하고, ID·소유자·내용 해시 대조와 감사 기록은 DB 함수가 합니다.
 async function handleRestore(route, method, owner, getRestorer, response) {
@@ -151,7 +197,7 @@ function handleZone(route, method, owner, instructorIds, response) {
   return response.status(501).json({ error: 'NOTICE_STORE_NOT_CONNECTED' });
 }
 
-export function createNotesHandler({ getVerifier, getStore, writesEnabled = false, getInstructorIds = () => new Set(), getRestorer = () => null }) {
+export function createNotesHandler({ getVerifier, getStore, writesEnabled = false, getInstructorIds = () => new Set(), getRestorer = () => null, getDeviceStore = () => null }) {
   if (typeof getVerifier !== 'function' || typeof getStore !== 'function') throw new TypeError('invalid_notes_handler');
   return async function handler(request, response) {
     response.setHeader('Cache-Control', 'no-store');
@@ -179,6 +225,15 @@ export function createNotesHandler({ getVerifier, getStore, writesEnabled = fals
     // 쿠키로 인증한 변경 요청은 같은 출처에서 온 것만 받습니다.
     if (cookieToken && method !== 'GET' && !sameOrigin(request)) {
       return response.status(403).json({ error: 'CROSS_ORIGIN_REJECTED' });
+    }
+
+    // 11단계: 기기 승인 요청·상태 확인은 자료 요청보다 먼저 처리합니다.
+    const device = deviceAction(request);
+    if (device) return handleDevice(device, method, owner, request, getDeviceStore, response);
+    // 브라우저 로그인(쿠키) 경로는 서버가 이 기기를 승인된 기기로 확인한 뒤에만 자료를 줍니다.
+    // Authorization 헤더(심판·자동 점검) 경로의 기기 확인은 반 엔진·판정기(6단계 device_registered)가 맡습니다.
+    if (cookieToken && !(await deviceApproved(owner, request, getDeviceStore))) {
+      return response.status(403).json({ error: 'DEVICE_NOT_APPROVED' });
     }
 
     // 8단계: 공지·관리 경로는 메모와 다른 구역으로 처리합니다. 화면 메뉴나 본문의 role은 보지 않습니다.
@@ -258,6 +313,10 @@ const notesHandler = createNotesHandler({
   getRestorer: () => {
     const client = supabaseFromEnv();
     return client && supabaseRestorer(client);
+  },
+  getDeviceStore: () => {
+    const client = supabaseFromEnv();
+    return client && supabaseDeviceStore(client);
   },
 });
 

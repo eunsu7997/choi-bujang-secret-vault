@@ -4,6 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BYTE BACK | 점령된 자료실</title>
+  <!-- 11단계: 설치형 웹앱 설정. 설치(홈 화면 추가)는 바로가기일 뿐 기기 확인이 아닙니다. -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#101a28">
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; }
     body { margin: 0; min-height: 100vh; background: #101a28; color: #ecf4ff; }
@@ -31,11 +35,16 @@
     li .actions button { font: inherit; font-size: 14px; padding: 6px 12px; border: 1px solid #51667c; border-radius: 8px; background: transparent; color: #ecf4ff; cursor: pointer; }
     li .actions button.confirm { border-color: #d07384; color: #ffe3e8; }
     li .actions button:disabled { opacity: .6; cursor: default; }
+    .device { border-color: #d0b073; }
+    .device code { font-size: 20px; letter-spacing: .12em; color: #ffe9b8; }
+    .offline { margin: 0 0 18px; padding: 12px 16px; border: 1px solid #d0b073; border-radius: 12px; color: #ffe9b8; background: #5a4a2a44; }
+    .offline[hidden] { display: none; }
   </style>
 </head>
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 5단계 서버 한곳으로</div>
+    <p id="offline-banner" class="offline" role="status" hidden>지금은 오프라인입니다. 메모는 서버에서만 받으므로 연결이 돌아오면 다시 불러옵니다.</p>
+    <div class="eyebrow">BYTE BACK · 11단계 나만의 접속 앱</div>
     <h1>점령된 자료실</h1>
     <p>로그인한 사용자에게만 서버 API의 메모를 보여 줍니다. 아래 기록은 모두 실습을 위해 만든 가상 자료입니다.</p>
     <div class="notice">로그인과 메모 요청은 모두 이 사이트의 서버 함수를 거칩니다. 서버가 로그인을 확인하고, 각 사용자는 자기 메모만 볼 수 있습니다.</div>
@@ -49,6 +58,17 @@
         <button id="logout" type="button">로그아웃</button>
       </div>
       <p id="auth-status" role="status">로그인 상태를 확인하는 중입니다.</p>
+    </section>
+    <section class="auth device" id="device-section" aria-label="기기 승인" hidden>
+      <strong>이 기기는 아직 승인되지 않았습니다</strong>
+      <p>서버가 이 기기를 승인된 기기로 확인하기 전에는 자료를 보여 주지 않습니다. 앱을 설치(홈 화면에 추가)했다고 기기 확인이 끝난 것은 아닙니다.</p>
+      <p>아래 버튼은 승인 <b>요청</b>만 보냅니다. 승인은 계정 주인이 서버(관리 화면)에서 승인 코드를 확인한 뒤 직접 합니다.</p>
+      <p>승인 코드: <code id="device-code">----</code></p>
+      <div class="row">
+        <button id="device-request" type="button">이 기기 승인 요청</button>
+        <button id="device-recheck" type="button">승인 다시 확인</button>
+      </div>
+      <p id="device-status" role="status"></p>
     </section>
     <section class="auth" id="editor-section" aria-label="메모 쓰기" hidden>
       <form id="note-form">
@@ -75,6 +95,17 @@
     const noteSubmit = document.querySelector('#note-submit');
     const noteCancel = document.querySelector('#note-cancel');
     const noteStatus = document.querySelector('#note-status');
+    const deviceSection = document.querySelector('#device-section');
+    const deviceCode = document.querySelector('#device-code');
+    const deviceStatus = document.querySelector('#device-status');
+    const deviceRequest = document.querySelector('#device-request');
+    const deviceRecheck = document.querySelector('#device-recheck');
+    const DEVICE_STATES = {
+      none: '아직 승인 요청을 보내지 않았습니다.',
+      pending: '승인 요청을 보냈습니다. 계정 주인이 서버에서 승인할 때까지 자료는 표시되지 않습니다.',
+      approved: '서버가 이 기기를 승인했습니다. 자료를 다시 불러옵니다.',
+      revoked: '이 기기의 승인이 취소되었습니다. 계정 주인에게 문의하세요.',
+    };
     let currentSession = null;
     let currentUser = null;
     let editingId = null;
@@ -114,6 +145,11 @@
       const response = await sendNotes(id ? `/api/notes/${encodeURIComponent(id)}` : '/api/notes', {
         method, headers: body ? JSON_HEADERS : {}, body: body ? JSON.stringify(body) : undefined,
       });
+      if (response.status === 403 && await deviceBlocked(response)) {
+        const error = new Error('이 기기는 아직 승인되지 않아 요청을 보낼 수 없습니다.');
+        error.status = 403;
+        throw error;
+      }
       if (!response.ok) {
         const error = new Error(WRITE_MESSAGES[response.status] ?? '자료 API를 사용할 수 없습니다.');
         error.status = response.status;
@@ -194,16 +230,62 @@
     let renderTurn = 0;
     let loadTurn = 0;
 
+    // 11단계: 서버가 "승인되지 않은 기기"로 거부하면 자료 화면 대신 기기 승인 화면을 보여 줍니다.
+    async function deviceBlocked(response) {
+      let data = null;
+      try { data = await response.json(); } catch { data = null; }
+      if (data?.error !== 'DEVICE_NOT_APPROVED') return false;
+      showDeviceGate();
+      return true;
+    }
+
+    function showDeviceState(data) {
+      if (typeof data?.code === 'string' && /^[0-9A-F]{4}-[0-9A-F]{4}$/u.test(data.code)) deviceCode.textContent = data.code;
+      deviceStatus.textContent = DEVICE_STATES[data?.state] ?? '승인 상태를 확인할 수 없습니다. 잠시 뒤 다시 시도하세요.';
+    }
+
+    async function showDeviceGate() {
+      const gen = sessionGen;
+      editorSection.hidden = true;
+      deviceSection.hidden = false;
+      showMessage('이 기기는 아직 승인되지 않아 자료를 표시하지 않습니다.');
+      try {
+        const response = await fetch('/api/device/status', { cache: 'no-store', credentials: 'same-origin' });
+        const data = response.ok ? await response.json() : null;
+        if (gen === sessionGen) showDeviceState(data);
+      } catch { if (gen === sessionGen) showDeviceState(null); }
+    }
+
+    deviceRequest.addEventListener('click', async () => {
+      const gen = sessionGen;
+      deviceRequest.disabled = true;
+      let data = null;
+      try {
+        const response = await fetch('/api/device/request', { method: 'POST', cache: 'no-store', credentials: 'same-origin', headers: JSON_HEADERS, body: '{}' });
+        data = response.ok ? await response.json() : null;
+      } catch { data = null; }
+      deviceRequest.disabled = false;
+      if (gen !== sessionGen) return;
+      // 버튼은 요청만 보냅니다. 승인 여부는 서버 응답(state)과 자료 요청 결과로만 판단합니다.
+      showDeviceState(data);
+      if (data?.state === 'approved') loadNotes(currentSession, renderTurn);
+    });
+    deviceRecheck.addEventListener('click', () => { if (currentSession) loadNotes(currentSession, renderTurn); });
+
     async function loadNotes(session, turn) {
       const requestTurn = ++loadTurn;
       try {
         const response = await sendNotes('/api/notes', {});
+        if (response.status === 403 && turn === renderTurn && requestTurn === loadTurn && await deviceBlocked(response)) return;
         if (response.status === 401) throw new Error('서버가 로그인을 확인하지 못했습니다. 로그아웃 후 다시 로그인하세요.');
         if (!response.ok) throw new Error('자료 API를 읽을 수 없습니다.');
         const data = await response.json();
         if (turn !== renderTurn) return;
         if (requestTurn !== loadTurn) return;
         if (!Array.isArray(data)) throw new Error('자료 형식이 맞지 않습니다.');
+        // 서버가 승인된 기기로 확인해 자료를 준 경우에만 기존 화면을 엽니다.
+        deviceSection.hidden = true;
+        editorSection.hidden = false;
         if (!data.length) showMessage('아직 메모가 없습니다.');
         else list.replaceChildren(...data.map(noteItem));
       } catch (error) {
@@ -221,6 +303,7 @@
       form.hidden = Boolean(session);
       signedIn.hidden = !session;
       editorSection.hidden = !session;
+      if (!session) deviceSection.hidden = true;
       const user = session ? session.userId : null;
       if (user !== currentUser) {
         // 다른 사용자로 바뀌면 앞 사용자의 편집 내용과 안내를 남기지 않습니다.
@@ -304,6 +387,7 @@
       resetEditor();
       noteStatus.textContent = '';
       editorSection.hidden = true;
+      deviceSection.hidden = true;
       list.replaceChildren();
       let revoked = false;
       try {
@@ -321,6 +405,16 @@
       if (!revoked) pendingNotice = LOGOUT_SERVER_FAILED;
       render(null);
     });
+
+    // 오프라인 안내와 오프라인 안내 페이지용 서비스 워커입니다. 서비스 워커는 자료 API를 저장하지 않습니다.
+    const offlineBanner = document.querySelector('#offline-banner');
+    if (typeof window !== 'undefined' && typeof navigator !== 'undefined') {
+      const syncOnline = () => { offlineBanner.hidden = navigator.onLine !== false; };
+      window.addEventListener('online', () => { syncOnline(); if (currentSession) loadNotes(currentSession, renderTurn); });
+      window.addEventListener('offline', syncOnline);
+      syncOnline();
+      if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
 
     render(await sessionApi());
   </script>

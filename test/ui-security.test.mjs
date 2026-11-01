@@ -105,3 +105,30 @@ test('login network errors clear password and re-enable the button', async () =>
   assert.equal(p.get('#login-form button').disabled, false);
   assert.match(p.get('#auth-status').textContent, /로그인에 실패/u);
 });
+
+test('11단계: unapproved device shows the approval panel without notes; approved device opens the existing screen', async () => {
+  const p = await page();
+  await p.auth('A');
+  await p.reply(p.pending.at(-1), { error: 'DEVICE_NOT_APPROVED' }, 403);
+  assert.equal(p.get('#device-section').hidden, false);
+  assert.equal(p.get('#editor-section').hidden, true);
+  assert.equal(p.list().children[0].textContent, '이 기기는 아직 승인되지 않아 자료를 표시하지 않습니다.');
+  const status = p.pending.at(-1);
+  assert.equal(status.url, '/api/device/status');
+  await p.reply(status, { state: 'pending', approved: false, code: 'ABCD-1234' });
+  assert.equal(p.get('#device-code').textContent, 'ABCD-1234');
+  // 승인 요청 버튼은 요청만 보내고, 응답이 pending이면 자료를 열지 않습니다.
+  const click = p.get('#device-request').fire('click');
+  const request = p.pending.at(-1);
+  assert.equal(request.url, '/api/device/request');
+  assert.equal(request.init.method, 'POST');
+  await p.reply(request, { state: 'pending', approved: false, code: 'ABCD-1234' }); await click;
+  assert.equal(p.get('#device-section').hidden, false);
+  assert.equal(p.list().children[0].textContent, '이 기기는 아직 승인되지 않아 자료를 표시하지 않습니다.');
+  // 서버가 승인한 뒤 다시 확인하면 기존 화면이 열립니다.
+  p.get('#device-recheck').fire('click'); await p.flush();
+  await p.reply(p.pending.at(-1), [{ id: 'a', title: 'A note', body: '' }]);
+  assert.equal(p.get('#device-section').hidden, true);
+  assert.equal(p.get('#editor-section').hidden, false);
+  assert.equal(p.list().children[0].children[0].textContent, 'A note');
+});

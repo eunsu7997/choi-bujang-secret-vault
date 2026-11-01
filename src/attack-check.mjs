@@ -395,6 +395,34 @@ async function tenthStepChecks(config, app) {
   ];
 }
 
+// 11단계: 설치형 웹앱 설정과 기기 승인 경로를 운영 주소로 실제 요청한 결과입니다(심판 판정 아님).
+async function eleventhStepChecks(config, app) {
+  const get = path => fetch(new URL(path, app), { redirect: 'error', signal: AbortSignal.timeout(10000) });
+  return [
+    await observe('app_manifest_served', '/manifest.webmanifest가 앱 이름과 standalone 표시를 가진 JSON으로 열림', async () => {
+      const response = await get('/manifest.webmanifest');
+      const data = response.ok ? await jsonOrNull(response) : null;
+      return `HTTP ${response.status}, 이름 ${typeof data?.name === 'string' ? '있음' : '없음'}, display ${data?.display ?? '없음'}`;
+    }),
+    await observe('app_install_not_trust', '첫 화면이 manifest를 연결하고 설치만으로 기기 확인이 끝나지 않는다고 안내하며 브라우저 저장소에 키를 두지 않음', async () => {
+      const response = await get('/');
+      const html = response.ok ? await response.text() : '';
+      return `HTTP ${response.status}, manifest 연결 ${html.includes('rel="manifest"') ? '있음' : '없음'}, 설치≠기기 확인 안내 ${html.includes('기기 확인이 끝난 것은 아닙니다') ? '있음' : '없음'}, localStorage·indexedDB ${/localStorage|indexedDB/iu.test(html) ? '사용' : '없음'}`;
+    }),
+    await observe('offline_page_served', '/offline.html 오프라인 안내와 /sw.js가 열리고 서비스 워커는 /api를 저장하지 않음', async () => {
+      const [offline, sw] = await Promise.all([get('/offline.html'), get('/sw.js')]);
+      const swText = sw.ok ? await sw.text() : '';
+      return `offline HTTP ${offline.status}, sw HTTP ${sw.status}, /api 제외 ${swText.includes("startsWith('/api/')") ? '있음' : '없음'}`;
+    }),
+    await observe('device_status_anonymous_blocked', '비로그인 GET /api/device/status 요청이 401', async () => `HTTP ${(await get('/api/device/status')).status}`),
+    { attackId: 'unapproved_device_no_data', expected: '로그인했지만 승인되지 않은 기기의 쿠키 요청 GET /api/notes는 403 DEVICE_NOT_APPROVED이고 자료가 없음',
+      observed: '미실행 (로그인 쿠키가 필요해 자동 점검하지 않음, test/step11-device-app.test.mjs 가상 토큰 시험과 브라우저에서 직접 확인)' },
+    { attackId: 'approved_device_screen', expected: '계정 주인이 서버에서 승인한 기기에서는 기존 메모 화면이 정상으로 열림',
+      observed: '미실행 (device-approve.sql로 승인한 뒤 브라우저에서 직접 확인)' },
+    ...(await fifthStepChecks(config, app)),
+  ];
+}
+
 export async function runAttackChecks(config) {
   if (config.step === 1) return firstStepChecks(config, appUrl(config));
   if (config.step === 2) return secondStepChecks(config, appUrl(config));
@@ -406,5 +434,6 @@ export async function runAttackChecks(config) {
   if (config.step === 8) return eighthStepChecks(config, appUrl(config));
   if (config.step === 9) return ninthStepChecks(config, appUrl(config));
   if (config.step === 10) return tenthStepChecks(config, appUrl(config));
+  if (config.step === 11) return eleventhStepChecks(config, appUrl(config));
   throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
 }

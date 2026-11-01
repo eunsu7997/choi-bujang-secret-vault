@@ -1,0 +1,14 @@
+{
+  "name": "BYTE BACK 최부장의 비밀 자료실",
+  "short_name": "BYTE BACK 자료실",
+  "description": "로그인과 서버의 기기 승인을 거친 뒤에만 자료를 여는 가상 메모 자료실입니다. 설치만으로 기기 확인이 끝나지 않습니다.",
+  "lang": "ko",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101a28",
+  "theme_color": "#101a28",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
