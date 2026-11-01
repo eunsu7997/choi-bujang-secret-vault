@@ -6,6 +6,7 @@ import { createNotesHandler, opsAction, supabaseNotesStore } from '../api/notes.
 import * as catalog from '../src/ops-catalog.mjs';
 import { runLocalProbes } from '../src/ops-local.mjs';
 import { runOpsProbe } from '../scripts/ops-probe.mjs';
+import { runAttackChecks } from '../src/attack-check.mjs';
 import { call, fakeSupabase, studentBearer, verify } from './helpers/auth-fixture.mjs';
 
 const userA = '11111111-1111-4111-8111-111111111111';
@@ -66,6 +67,38 @@ test('ops:probe procedure records real responses, request IDs and server IDs; co
   assert.ok(report.tally['미실행'] >= 16);
   const down = await runOpsProbe({ base: 'https://example.test/', fetchImpl: async () => { throw new TypeError('down'); } });
   assert.ok(down.rows.filter(r => r.where === '운영 API 실제 요청').every(r => r.ok === undefined && /^(미실행|not_run)/u.test(r.actual)));
+});
+
+test('submission evidence matches captured requests and never invents responses or IDs', async () => {
+  const original = globalThis.fetch;
+  const sent = [];
+  globalThis.fetch = async (url, init = {}) => {
+    assert.equal(typeof url, 'string');
+    const id = init.headers?.['x-attack-id'];
+    if (!id) return new Response('탈환 작전실', { status: 200 });
+    const probe = catalog.HTTP_PROBES.find(p => p.id === id);
+    assert.equal(new URL(url).pathname, probe.path);
+    assert.equal(init.method, probe.method);
+    if (id === 'http_manifest_ok') throw new TypeError('network unavailable');
+    const status = id === 'http_notes_anon' ? 503 : probe.expect[0];
+    sent.push({ id, status, requestId: init.headers['x-request-id'] });
+    return new Response(null, { status, headers: { 'x-vercel-id': 'test-server' } });
+  };
+  try {
+    const results = await runAttackChecks({ step: 12, publicAppUrl: 'https://example.test/', sampleMarker: 'SAMPLE_NOTE_1' });
+    for (const probe of catalog.HTTP_PROBES) {
+      const observed = results.find(r => r.attackId === probe.id).observed;
+      const request = sent.find(r => r.id === probe.id);
+      if (!request) assert.equal(observed, 'not_run');
+      else {
+        assert.ok(observed.startsWith(`HTTP ${request.status} ·`));
+        assert.ok(observed.includes(`attackId ${request.id}`));
+        assert.ok(observed.includes(request.requestId));
+        assert.ok(observed.includes(`${probe.method} ${probe.path}`));
+        assert.ok(observed.length <= 300);
+      }
+    }
+  } finally { globalThis.fetch = original; }
 });
 
 test('ops summary API: login required, approved device for browser, header path works, no memo bodies', async () => {

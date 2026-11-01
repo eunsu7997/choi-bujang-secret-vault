@@ -11,18 +11,20 @@ const row = (probe, fields) => ({ id: probe.id, stage: probe.stage, kind: probe.
   where: '운영 API 실제 요청', expected: probe.expect.join('/'), ...fields });
 
 export async function runHttpProbe(probe, base, fetchImpl = fetch) {
-  const requestId = randomUUID();
   const at = new Date().toISOString();
-  if (!READ_METHODS.has(probe.method)) return row(probe, { actual: 'not_run', ok: undefined, requestId, serverId: null, at, notRun: true });
-  const headers = { 'x-request-id': requestId };
+  const url = new URL(probe.path, base).href;
+  const request = { method: probe.method, url };
+  if (!READ_METHODS.has(probe.method)) return row(probe, { ...request, actual: 'not_run', ok: undefined, requestId: null, serverId: null, at, notRun: true });
+  const requestId = randomUUID();
+  const headers = { 'x-request-id': requestId, 'x-attack-id': probe.id };
   if (probe.auth === 'forged') headers.authorization = FORGED_BEARER;
   try {
-    const response = await fetchImpl(new URL(probe.path, base), { method: probe.method, headers, redirect: 'manual', signal: AbortSignal.timeout(10000) });
-    return row(probe, { actual: `HTTP ${response.status}`, ok: probe.expect.includes(response.status), requestId,
+    const response = await fetchImpl(url, { method: probe.method, headers, redirect: 'manual', signal: AbortSignal.timeout(10000) });
+    return row(probe, { ...request, status: response.status, actual: `HTTP ${response.status}`, ok: probe.expect.includes(response.status), requestId,
       serverId: response.headers.get('x-vercel-id') ?? null, at });
   } catch (error) {
     // 연결 자체가 안 되면 결과가 아니라 미실행입니다(통과·실패 어느 쪽으로도 세지 않음).
-    return row(probe, { actual: `미실행 (요청 실패: ${error?.name === 'TimeoutError' ? '시간 초과' : '연결 안 됨'})`, ok: undefined, requestId, serverId: null, at });
+    return row(probe, { ...request, actual: 'not_run', ok: undefined, requestId: null, serverId: null, at, notRun: true });
   }
 }
 
