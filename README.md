@@ -3,6 +3,14 @@
 - 운영: https://choi-bujang-secret-vault-livid.vercel.app/
 - 저장소: https://github.com/eunsu7997/choi-bujang-secret-vault
 
+## 보너스 xdr-04 저장점 · 몰래 심어진 프로그램 탐지 (2026-11-01)
+
+- 제작 1~5를 [persistence 안내](xdr/persistence/README.md)에 정리했습니다. 경보 읽기·근거 패턴·단독 판단·기기 단위 임시 격리·실행 결과를 포함합니다.
+- 재현: npm run xdr:run -- persistence → node xdr/persistence/respond.mjs --fixture → node --test test/persistence.test.mjs.
+- 가상 경보 24건: block 8 · alert 8 · record 8, 정상 이벤트 차단 0건. 독립 시나리오 연결 시험에서 공격 거부 8건·기타 사건 허용 16건·무관한 기기 허용 24건을 확인했습니다. 공식 점수는 미확인입니다.
+- 만료는 경보 시각 + 5분이며 근거 ID를 남깁니다. 기존 판정기를 먼저 적용하고 엔진의 검증된 deviceId로 해당 PC만 격리합니다. 운영 연결에는 인증된 Wazuh 에이전트-기기 매핑과 새 규칙·이유 코드 등록이 필요합니다. 외부 엔진 연결 완료로 보고하지 않습니다.
+- 기존 12단계·xdr-01·xdr-03 코드, 원본 경보·DB·설정은 유지합니다. 다른 보너스 작업은 이 저장점에 섞지 않습니다.
+
 ## 보너스 xdr-03 저장점 · 알려진 취약점 악용 (2026-11-01)
 
 - 제작 1~5: 경보 읽기, 근거를 붙인 패턴 목록, 외부 의존성이 없는 단독 판단, 만료·근거 경보를 가진 추가 거부 연결, 시험 결과를 [xdr/known-cve/README.md](xdr/known-cve/README.md)에 정리했습니다.
