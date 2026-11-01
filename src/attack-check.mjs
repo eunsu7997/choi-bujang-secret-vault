@@ -424,8 +424,15 @@ async function eleventhStepChecks(config, app) {
 }
 
 // 12단계: 탈환 작전실과 같은 시험(scripts/ops-probe.mjs)을 실제로 실행한 결과입니다. 연결 실패·미실행은 통과로 세지 않습니다.
+// 12단계 보완: 점검 본체는 src/ops-probe-core.mjs(같은 폴더)에서 불러옵니다. 불러오기에 실패해도 묶음 전체를 멈추지 않고 미실행으로 남깁니다.
 async function twelfthStepChecks(config, app) {
-  const { runOpsProbe } = await import('../scripts/ops-probe.mjs');
+  let runOpsProbe;
+  try {
+    ({ runOpsProbe } = await import('./ops-probe-core.mjs'));
+  } catch (error) {
+    return [{ attackId: 'ops_probe_import', expected: '탈환 작전실 점검 본체(src/ops-probe-core.mjs)를 불러와 실제 요청을 보냄',
+      observed: `미실행 (불러오기 실패: ${String(error?.code ?? error?.name ?? 'unknown').slice(0, 60)})` }];
+  }
   const report = await runOpsProbe({ base: app });
   const http = report.rows.filter(row => row.where === '운영 API 실제 요청').map(row => ({
     attackId: row.id, expected: `${row.stage}단계 ${row.kind} · ${row.label} → ${row.expected}`,
@@ -440,7 +447,7 @@ async function twelfthStepChecks(config, app) {
       return `HTTP ${response.status}, 작전실 ${html.includes('탈환 작전실') ? '있음' : '없음'}, innerHTML ${/innerHTML/u.test(html) ? '사용' : '없음'}`;
     }),
     { attackId: 'ops_local_student_code', expected: '학생 판정기·탐지기 고정 가상 요청이 모두 기대대로',
-      observed: `로컬 실행: ${local.filter(row => row.ok === true).length}/${local.length}건 기대대로` },
+      observed: `로컬 실행 ${local.length}건: 기대대로 ${local.filter(row => row.ok === true).length} · 기대와 다름 ${local.filter(row => row.ok === false).length} · 미실행 ${local.filter(row => typeof row.ok !== 'boolean').length}` },
     { attackId: 'ops_41_status', expected: '공식 41종을 실측 통과·부분 실측·실측 실패·미실행으로 구분(통과 꾸밈 없음, 공식 판정 아님)',
       observed: Object.entries(report.tally).map(([label, value]) => `${label} ${value}`).join(' · ') },
   ];

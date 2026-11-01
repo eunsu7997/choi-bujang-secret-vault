@@ -1,9 +1,23 @@
 // 12단계: 학생 판정기·탐지기를 고정 가상 요청으로 직접 실행한 결과입니다(서버 함수와 Node 절차가 함께 씁니다).
 // 결과는 실행할 때마다 새로 계산하며, 메모 본문·토큰은 다루지 않습니다.
-import { randomUUID } from 'node:crypto';
+// 심판 격리 실행기에서도 불러올 수 있도록 src/ 밖 파일(scripts/)을 불러오지 않습니다.
+import { createHash, randomUUID } from 'node:crypto';
 import { decide } from './decider.mjs';
 import { detect } from './detect.mjs';
-import { fixtureRequests } from '../scripts/fixture-7.mjs';
+
+// scripts/fixture-7.mjs와 같은 모양의 고정 가상 요청(엔진의 공개 입력 모양)입니다.
+const fixture = (signals, recentEvents) => ({
+  schema: 'aleph.decision.v1', requestId: randomUUID(), classId: 'class_fixture',
+  projectId: 'project_fixture', subjectId: 'learner_fixture', deviceId: 'a'.repeat(16),
+  service: 'notes', method: 'GET', path: '/notes/demo', route: 'GET /notes/:id',
+  queryLength: 0, querySha256: createHash('sha256').update('').digest('hex'),
+  at: new Date().toISOString(), policyRevision: 1, deviceRegistered: true,
+  stepUp: { verified: false, authAgeSeconds: null }, recentEvents, signals,
+});
+const fixtureRequests = () => ({
+  normal: fixture({ source: 'judge_fixture', region: 'local', network: 'usual', hour: 14 }, []),
+  suspicious: fixture({ source: 'judge_fixture', region: 'foreign', network: 'unusual', hour: 3 }, [{ kind: 'risk_signal', ageSeconds: 60, count: 20 }]),
+});
 
 const burst = [{ kind: 'risk_signal', ageSeconds: 60, count: 20 }];
 const sig = (region, network, hour) => ({ source: 'judge_fixture', region, network, hour });

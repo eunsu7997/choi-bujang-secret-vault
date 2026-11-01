@@ -182,8 +182,28 @@ test('server function bundle includes every file api/notes.js reads at runtime',
 
 test('bundle path uses only modules allowed in the judge sandbox', async () => {
   const allowed = /^node:(fs|path|url|child_process|crypto)$/u;
-  for (const file of ['scripts/bundle.mjs', 'src/attack-check.mjs', 'scripts/ops-probe.mjs', 'scripts/policy-backup.mjs', 'src/ops-local.mjs', 'src/ops-catalog.mjs', 'scripts/fixture-7.mjs', 'src/decider.mjs', 'src/detect.mjs']) {
+  for (const file of ['scripts/bundle.mjs', 'src/attack-check.mjs', 'scripts/ops-probe.mjs', 'scripts/policy-backup.mjs', 'src/ops-probe-core.mjs', 'src/ops-local.mjs', 'src/ops-catalog.mjs', 'scripts/fixture-7.mjs', 'src/decider.mjs', 'src/detect.mjs']) {
     const source = await read(file);
     for (const match of source.matchAll(/from '(node:[^']+)'/gu)) assert.match(match[1], allowed, `${file}: ${match[1]}`);
   }
+});
+
+test('step 12 checker import path stays inside src/ and computes no paths at import time', async () => {
+  const source = await read('src/attack-check.mjs');
+  const twelfth = source.slice(source.indexOf('async function twelfthStepChecks'), source.indexOf('export async function runAttackChecks'));
+  assert.doesNotMatch(twelfth, /\.\.\/scripts\//u);
+  assert.match(twelfth, /import\('\.\/ops-probe-core\.mjs'\)/u);
+  for (const file of ['src/ops-probe-core.mjs', 'src/ops-local.mjs', 'src/ops-catalog.mjs', 'src/decider.mjs', 'src/detect.mjs']) {
+    const code = await read(file);
+    assert.doesNotMatch(code, /from '\.\.\//u, `${file} imports outside src/`);
+    assert.doesNotMatch(code, /import\.meta\.(dirname|filename)|fileURLToPath/u, `${file} computes paths at import time`);
+  }
+});
+
+test('policy probe re-reads the snapshot with relative URLs and reports drift 0', async () => {
+  const { policyProbe } = await import('../src/ops-probe-core.mjs');
+  const result = policyProbe();
+  assert.equal(result.ok, true, result.actual);
+  assert.match(result.actual, /차이 0개/u);
+  assert.equal(policyProbe(new URL('file:///nonexistent/')).ok, undefined);
 });
