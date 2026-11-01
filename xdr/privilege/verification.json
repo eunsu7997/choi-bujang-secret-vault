@@ -1,0 +1,19 @@
+{
+  "schema": "aleph.xdr.privilege.verification.v1",
+  "mode": "isolated-fixture-replay",
+  "counts": {
+    "block": 9,
+    "alert": 6,
+    "record": 11
+  },
+  "checks": {
+    "attacksDenied": 9,
+    "ambiguousAllowed": 6,
+    "recordAllowed": 11,
+    "recordEventsBlocked": 0,
+    "sameSourceOtherAccountAllowed": 26,
+    "expiredAttackAllowed": 9
+  },
+  "productionConnected": false,
+  "officialJudgment": false
+}

@@ -3,6 +3,13 @@
 - 운영: https://choi-bujang-secret-vault-livid.vercel.app/
 - 저장소: https://github.com/eunsu7997/choi-bujang-secret-vault
 
+## 보너스 xdr-05 저장점 · 권한 가로채기를 잡아 냅니다 (2026-11-01)
+
+- [권한 상승 모듈 안내](xdr/privilege/README.md)에 제작 1~5, MITRE T1068·T1078 근거와 연결 조건을 정리했습니다. 독립 판단 파일에는 외부 의존성이 없습니다.
+- 재실행: `npm run xdr:run -- privilege` → `node xdr/privilege/respond.mjs --fixture` → `node --test test/privilege.test.mjs`.
+- 제공 가상 경보 26건: **block 9 · alert 6 · record 11**, 수동 검토한 정상 이벤트의 오차단 0건. 안내 조회·추가 없음·명령 실행 없음의 오차단을 고쳤고, 같은 IP의 다른 계정 26건 통과와 만료 후 공격 요청 9건의 추가 거부 해제를 확인했습니다.
+- 추가 거부는 출발 주소와 계정 지문에 한정하고 경보 시각 + 5분 만료와 근거 경보 ID를 남깁니다. 기존 판정기의 거부·추가 인증은 보존합니다. 실제 엔진 연결·배포·공식 제출·점수 확인은 미실행입니다.
+
 ## 보너스 xdr-06 저장점 · 자료 빼돌리기를 잡아 냅니다 (2026-11-01)
 
 - `xdr/exfiltration/`에 안전한 경보 읽기, MITRE 근거 패턴, 외부 의존성 없는 단독 판단, 목적지별 만료 거부 연결, `result.json`을 완성했습니다. [사용법·연결 조건](xdr/exfiltration/README.md).

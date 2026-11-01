@@ -1,0 +1,22 @@
+[
+  {
+    "name": "unexpected_admin_membership",
+    "condition": "administrators·sudo·wheel 그룹의 실제 추가/재가입과 원격 출발·일반 계정·반복 추가(3건 이상)·관리 명령·시간 외 신호 중 하나가 함께 있음. 수준 10~16, 유효한 출발 주소·계정 필요. 실패·부정·조회·교육 설명은 차단하지 않음.",
+    "evidence": "MITRE T1078의 기존 계정 악용에 따른 권한 상승을 탐지하는 정황 패턴이며, 그룹 조작 행위 자체는 T1098로 보강함; 계정 탈취 성공을 확정하지 않음.",
+    "sources": ["https://attack.mitre.org/techniques/T1078/", "https://attack.mitre.org/techniques/T1098/"],
+    "minLevel": 10
+  },
+  {
+    "name": "unexpected_elevated_execution",
+    "condition": "관리자 명령 실행/세션 승격과 신규 출발지·직전 승격·다른 계정 권한 사용이 함께 보고됨. 수준 10~16, 유효한 출발 주소·계정 필요. 시간 외 신호 하나만 있으면 알림.",
+    "evidence": "MITRE T1068은 소프트웨어 취약점 악용에 의한 승격, T1078은 기존 계정 권한 악용을 설명함; 이 패턴은 승격 후 이상 사용 정황만 탐지하며 취약점 악용이나 토큰 탈취 성공을 확정하지 않음.",
+    "sources": ["https://attack.mitre.org/techniques/T1068/", "https://attack.mitre.org/techniques/T1078/"],
+    "minLevel": 10
+  },
+  {
+    "name": "unconfirmed_privilege_change",
+    "condition": "단발/취소/실패한 승격·그룹 변경·관리자 명령 시도, 시간 외 권한 사용 또는 필수 정보가 부족한 이상 사용은 알림. 읽기·변경 없음·교육용 설명·평소 로그인은 기록.",
+    "evidence": "MITRE T1068·T1078의 권한 상승/계정 악용은 합법적인 관리자 활동과 구분해야 하므로, 권한 관련 신호 하나나 실패한 시도만으로 차단하지 않는 로컬 보수 정책임.",
+    "sources": ["https://attack.mitre.org/techniques/T1068/", "https://attack.mitre.org/techniques/T1078/"]
+  }
+]
