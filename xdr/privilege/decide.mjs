@@ -61,8 +61,14 @@ export function decide(alert) {
   // 원문 설명에 있는 행위와 문맥만 검사합니다. ID·계정 이름·MITRE 표지는 정답으로 쓰지 않습니다.
   const membership = /관리자\s*그룹.{0,100}(?:추가|들어|가입)|다시\s*관리자로\s*들어|(?:added|joined|rejoined).{0,80}(?:administrators|sudo|wheel)|(?:administrators|sudo|wheel).{0,80}(?:added|joined)/iu.test(s);
   const execution = /관리자\s*명령|권한\s*명령|세션.{0,80}관리자\s*권한|(?:admin(?:istrator)?|privileged|elevated)\s+command|session.{0,80}(?:elevated|admin(?:istrator)?\s+privileges)/iu.test(s);
-  const relevant = membership || execution || /권한\s*상승|그룹.{0,80}(?:추가|만들)|관리자로|privilege\s+escalation/iu.test(s);
+  // 계정 권한 종류 조사와 그룹 설명 변경은 승격 성공이 아니어도 검토할 약한 신호입니다.
+  // 단순 그룹 소속 읽기·자기 세션 조회와 구분하며, 실제 승격/명령의 차단 판정을 덮지 않습니다.
+  const privilegeInquiry = !membership && !execution && (
+    /계정\s*(?:종류|유형|권한).{0,60}(?:조회|확인)|(?:조회|확인).{0,60}계정\s*(?:종류|유형|권한)/u.test(s)
+    || /그룹.{0,60}설명.{0,40}(?:바뀌|변경|수정)/u.test(s));
+  const relevant = privilegeInquiry || membership || execution || /권한\s*상승|그룹.{0,80}(?:추가|만들)|관리자로|privilege\s+escalation/iu.test(s);
   if (!relevant) return answer(0.05, 'no_supported_pattern');
+  if (privilegeInquiry) return answer(0.6, PATTERNS[2].name);
 
   // 단어 언급·부정·조회가 양성 신호로 승격되는 것을 막습니다.
   const failed = /취소|실패|\b(?:failed|cancelled|canceled|denied|attempt(?:ed)?)\b/iu.test(s);

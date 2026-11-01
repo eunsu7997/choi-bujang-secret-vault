@@ -3,13 +3,13 @@
   "mode": "isolated-fixture-replay",
   "counts": {
     "block": 9,
-    "alert": 6,
-    "record": 11
+    "alert": 8,
+    "record": 9
   },
   "checks": {
     "attacksDenied": 9,
-    "ambiguousAllowed": 6,
-    "recordAllowed": 11,
+    "ambiguousAllowed": 8,
+    "recordAllowed": 9,
     "recordEventsBlocked": 0,
     "sameSourceOtherAccountAllowed": 26,
     "expiredAttackAllowed": 9

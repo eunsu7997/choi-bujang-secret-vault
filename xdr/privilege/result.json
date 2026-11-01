@@ -76,9 +76,9 @@
     },
     {
       "alertId": "pv-13",
-      "action": "record",
-      "confidence": 0.05,
-      "reason": "no_supported_pattern"
+      "action": "alert",
+      "confidence": 0.6,
+      "reason": "unconfirmed_privilege_change"
     },
     {
       "alertId": "pv-14",
@@ -100,9 +100,9 @@
     },
     {
       "alertId": "pv-17",
-      "action": "record",
-      "confidence": 0.05,
-      "reason": "no_supported_pattern"
+      "action": "alert",
+      "confidence": 0.6,
+      "reason": "unconfirmed_privilege_change"
     },
     {
       "alertId": "pv-18",
@@ -161,7 +161,7 @@
   ],
   "counts": {
     "block": 9,
-    "alert": 6,
-    "record": 11
+    "alert": 8,
+    "record": 9
   }
 }

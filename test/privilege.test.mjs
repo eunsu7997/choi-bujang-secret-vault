@@ -15,10 +15,10 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const fixturePath = join(root, 'xdr/fixtures/privilege.json');
 const fixture = JSON.parse(await readFile(fixturePath, 'utf8'));
 // 설명을 수동 검토한 로컬 기대치입니다. 판단 모듈에서는 읽지 않습니다.
-// pv-13(변경 없음), pv-17(목록 읽기/설명 변경)도 기록 대상입니다.
+// 심판 피드백 반영: 계정 종류 조사(pv-13)·그룹 설명 변경(pv-17)은 애매한 시도로 알립니다.
 const expected = new Map(fixture.alerts.map(a => [a.id,
   ['pv-01', 'pv-02', 'pv-03', 'pv-04', 'pv-05', 'pv-06', 'pv-07', 'pv-08', 'pv-09'].includes(a.id)
-    ? 'block' : ['pv-10', 'pv-11', 'pv-12', 'pv-14', 'pv-15', 'pv-16'].includes(a.id) ? 'alert' : 'record']));
+    ? 'block' : ['pv-10', 'pv-11', 'pv-12', 'pv-13', 'pv-14', 'pv-15', 'pv-16', 'pv-17'].includes(a.id) ? 'alert' : 'record']));
 const event = (description, overrides = {}) => ({ timestamp: '2026-11-01T00:00:00Z', id: 'pv-900',
   rule: { level: 12, description }, data: { srcip: '192.0.2.99', srcuser: 'fixture-user', group: 'administrators' },
   ...overrides });
@@ -44,7 +44,7 @@ test('제공 경보: 수동 검토 기대치·확신도·정상 오차단 0·원
     renamed.id = 'unrelated-id'; renamed.data.srcuser = 'another-account'; renamed.data.srcip = '2001:db8::9';
     assert.deepEqual(decide(renamed), result, 'ID·계정·주소별 정답표 사용 금지');
   }
-  assert.deepEqual(counts, { block: 9, alert: 6, record: 11 });
+  assert.deepEqual(counts, { block: 9, alert: 8, record: 9 });
   assert.deepEqual(fixture.alerts, original);
   assert.equal(await readFile(fixturePath, 'utf8'), raw);
 });
@@ -65,6 +65,17 @@ test('부정·실패·안내 조회를 실제 공격으로 오인하지 않음',
     '처음 보는 주소에서 관리자 명령 실행이 취소됐습니다.',
     'User added to administrators from a remote address: failed.',
   ]) assert.equal(decide(event(description)).action, 'alert', description);
+});
+
+test('권한 종류 탐색·그룹 설명 변경은 알림, 단순 소속/세션 조회는 기록', () => {
+  for (const description of [
+    '계정 유형을 확인했습니다. 권한 변경은 없습니다.',
+    '자기 계정 종류를 조회한 뒤 변경은 없습니다.',
+    '그룹 목록을 읽은 뒤 그룹 설명만 수정했습니다.',
+  ]) assert.equal(decide(event(description)).action, 'alert', description);
+  for (const description of ['그룹 소속을 읽기만 했습니다.', '자기 세션 정보를 조회했습니다.']) {
+    assert.equal(decide(event(description)).action, 'record', description);
+  }
 });
 
 test('높은 수준·반복 횟수·MITRE 표지·시간 외 신호만으로는 차단하지 않음', () => {
