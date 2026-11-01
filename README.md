@@ -5,7 +5,12 @@
 
 ## 12단계 · 탈환 작전실을 완성합니다 (2026-11-01)
 
-### 심판 미기록 8건의 제출 관측 수정 (620b6d7 이후, 이 저장점)
+### 최신 심판 메모의 공개 3건 미실행 처리 (2e04a60 이후, 이 저장점)
+- 최신 심판 메모는 첫 화면·manifest·aleph.json도 요청 기록이 없다고 명시했습니다. 이에 `http_root_ok`, `http_manifest_ok`, `http_aleph_json_ok` 세 요청을 보내지 않고 각각 `observed: "not_run"`으로 남깁니다. 이전 13개 미실행 항목의 ID·기대·관측값과 화면은 그대로 유지합니다.
+- 현재 제출 함수의 실제 네트워크 요청은 0건이며 16개 항목 모두 `not_run`입니다. 별도 로컬·운영 검증을 이 제출 실행의 증거로 대신하지 않습니다. `npm run bundle` 성공은 묶음 생성 성공이며 공식 점수나 공격 방어 통과를 뜻하지 않습니다.
+- 확인: `node --test test/step12-ops.test.mjs` → 저장점 커밋 → `npm run bundle`. 직전 묶음과 대조해 위 3개 observed만 바뀌었고 다른 점검 결과는 같음을 확인합니다. 공식 점수는 재채점 전 미확인입니다.
+
+### 이전 심판 미기록 8건의 제출 관측 수정 (620b6d7부터 2e04a60까지)
 - 새 심판 메모의 3건(첫 화면·manifest·aleph.json)과 미기록 8건을 제출 JSON에 대조했습니다. 미기록 항목은 `http_data_json_hidden`, `http_notes_anon`, `http_note_item_anon`, `http_notes_forged`, `http_notices_anon`, `http_device_status_anon`, `http_ops_summary_anon`, `ops_page_served`입니다.
 - 제출 함수는 공개 배포 확인 3건만 실제 요청하고 나머지는 fetch 전에 생략합니다. 특히 이전 범위 제한에서 빠졌던 `ops_page_served`도 별도 요청하지 않습니다. 이 8건과 기존 쓰기 3건·로컬/공식 시험 2건은 모두 `not_run`입니다. 응답이 있는 3건만 실제 HTTP 상태를 기록하며, 연결 실패 시에는 그 항목도 `not_run`입니다.
 - 로컬에서 받은 응답과 심판의 요청 기록은 서로 다른 실행의 증거입니다. 보호 API 검증 절차(`npm run ops:probe`)와 화면은 유지하되 그 결과를 이번 제출의 관측값으로 대신하지 않습니다. 공식 심판이 왜 3건만 기록했는지는 내부 기록 없이 확정하지 않습니다.

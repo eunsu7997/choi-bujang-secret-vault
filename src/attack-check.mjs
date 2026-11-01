@@ -431,13 +431,9 @@ async function twelfthStepChecks(config, app) {
   const probes = [...HTTP_PROBES, {
     id: 'ops_page_served', method: 'GET', path: '/ops.html', expect: [200],
   }];
-  // 이 제출은 공개 배포 확인 3건만 실행합니다. 보호 API와 ops.html 확인은
-  // 별도 ops:probe/브라우저 점검에 남기고 그 관측을 제출 실행 결과로 옮기지 않습니다.
-  const submissionPaths = new Map([
-    ['http_root_ok', '/'],
-    ['http_manifest_ok', '/manifest.webmanifest'],
-    ['http_aleph_json_ok', '/aleph.json'],
-  ]);
+  // 최신 심판 메모는 공개 배포 확인 3건도 요청 기록이 없다고 명시했습니다.
+  // 이 세 요청도 보내지 않습니다. 기존 13개 미실행 항목과 별도 점검 절차는 유지합니다.
+  const submissionPaths = new Map();
   const attempts = [];
   for (const probe of probes) {
     const attempt = { attackId: probe.id,

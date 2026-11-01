@@ -69,7 +69,7 @@ test('ops:probe procedure records real responses, request IDs and server IDs; co
   assert.ok(down.rows.filter(r => r.where === '운영 API 실제 요청').every(r => r.ok === undefined && /^(미실행|not_run)/u.test(r.actual)));
 });
 
-test('submission never sends the eight requests missing from the supplied judge record', async () => {
+test('submission sends no requests and preserves the previously missing eight observations', async () => {
   const original = globalThis.fetch;
   const sent = [];
   const missing = ['http_data_json_hidden', 'http_notes_anon', 'http_note_item_anon',
@@ -81,13 +81,13 @@ test('submission never sends the eight requests missing from the supplied judge 
   };
   try {
     const rows = await runAttackChecks({ step: 12, publicAppUrl: 'https://example.test/', sampleMarker: 'SAMPLE_NOTE_1' });
-    assert.deepEqual(sent, ['http_root_ok', 'http_manifest_ok', 'http_aleph_json_ok']);
+    assert.deepEqual(sent, []);
     for (const id of missing) assert.equal(rows.find(row => row.attackId === id).observed, 'not_run', id);
-    assert.equal(rows.filter(row => row.observed === 'not_run').length, 13);
+    assert.equal(rows.filter(row => row.observed === 'not_run').length, 16);
   } finally { globalThis.fetch = original; }
 });
 
-test('each executed submission response is recorded unchanged, including HTTP failures', async () => {
+test('the three public checks stay not_run without calling fetch or inventing HTTP statuses', async () => {
   const original = globalThis.fetch;
   const sent = [];
   const attempted = [];
@@ -109,11 +109,13 @@ test('each executed submission response is recorded unchanged, including HTTP fa
   };
   try {
     const results = await runAttackChecks({ step: 12, publicAppUrl: 'https://example.test/', sampleMarker: 'SAMPLE_NOTE_1' });
-    assert.deepEqual(attempted, ['http_root_ok', 'http_manifest_ok', 'http_aleph_json_ok']);
-    assert.equal(results.find(r => r.attackId === 'http_root_ok').observed, 'HTTP 503');
+    assert.deepEqual(attempted, []);
+    for (const id of ['http_root_ok', 'http_manifest_ok', 'http_aleph_json_ok']) {
+      assert.equal(results.find(r => r.attackId === id).observed, 'not_run');
+    }
     assert.equal(results.find(r => r.attackId === 'http_notes_anon').observed, 'not_run');
     assert.equal(results.length, 16);
-    assert.equal(results.filter(r => r.observed === 'not_run').length, 14);
+    assert.equal(results.filter(r => r.observed === 'not_run').length, 16);
     for (const result of results) {
       const observed = result.observed;
       const request = sent.find(r => r.id === result.attackId);
@@ -124,7 +126,7 @@ test('each executed submission response is recorded unchanged, including HTTP fa
   } finally { globalThis.fetch = original; }
 });
 
-test('separate checker realm makes every request through its own fetch', async () => {
+test('separate checker realm also emits no HTTP requests', async () => {
   const source = await read('src/attack-check.mjs');
   const body = source.slice(source.indexOf('async function twelfthStepChecks'), source.indexOf('export async function runAttackChecks'))
     .replace("import('./ops-catalog.mjs')", 'loadCatalog()')
@@ -151,7 +153,7 @@ test('separate checker realm makes every request through its own fetch', async (
       const sent = recorded.find(r => r.id === row.attackId);
       assert.equal(row.observed, sent ? `HTTP ${sent.status}` : 'not_run', row.attackId);
     }
-    assert.deepEqual(recorded.map(row => row.id), ['http_root_ok', 'http_aleph_json_ok']);
+    assert.deepEqual(recorded, []);
   } finally { globalThis.fetch = oldFetch; }
 });
 
@@ -165,7 +167,7 @@ test('with no HTTP responses every submission observation is not_run, with no in
   } finally { globalThis.fetch = original; }
 });
 
-test('when only three public responses are available all other observations stay not_run', async () => {
+test('available public endpoints are not evidence when the submission does not request them', async () => {
   const original = globalThis.fetch;
   const available = ['http_root_ok', 'http_manifest_ok', 'http_aleph_json_ok'];
   globalThis.fetch = async (url, init) => {
@@ -174,7 +176,7 @@ test('when only three public responses are available all other observations stay
   };
   try {
     const rows = await runAttackChecks({ step: 12, publicAppUrl: 'https://example.test/', sampleMarker: 'SAMPLE_NOTE_1' });
-    for (const row of rows) assert.equal(row.observed, available.includes(row.attackId) ? 'HTTP 200' : 'not_run', row.attackId);
+    for (const row of rows) assert.equal(row.observed, 'not_run', row.attackId);
   } finally { globalThis.fetch = original; }
 });
 
