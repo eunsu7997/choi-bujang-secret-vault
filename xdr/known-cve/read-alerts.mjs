@@ -13,6 +13,7 @@ function safeText(value) {
   // 전각 문자·공백·보이지 않는 문자로 나뉜 비밀값 항목명도 검사합니다.
   const inspected = value.normalize('NFKC').replace(/[\p{Cc}\p{Cf}\p{Z}\s]/gu, '');
   if (/(?:password|passwd|passphrase|secret|token|api[_-]?key|authorization|cookie|credential|bearer)/iu.test(inspected)
+      || /(?:비밀번호|비번|암호|인증키|접근키|개인키|비밀키|토큰|세션키|쿠키)/u.test(inspected)
       || /(?:pwd|pass|pin|auth|session(?:[_-]?id)?|(?:access|private|client|signing)[_-]?key)["']*[:=]/iu.test(inspected)
       || /-----BEGIN|\b(?:sk|ghp|github_pat)[_-]|\bAKIA[A-Z0-9]{16}\b/u.test(inspected)
       || /[A-Za-z0-9_+\/-]{32,}/u.test(inspected)

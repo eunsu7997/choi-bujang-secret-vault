@@ -20,6 +20,8 @@ aleph-stage12 폴더의 터미널에서 실행합니다. 웹 화면에서 누를
 
 확인한 결과는 block 8 · alert 8 · record 8입니다. 재연에서 공격 8건 거부, 애매한 8건과 정상 8건 통과, 정상 차단 0건, 같은 출발 주소의 정상 요청 24건 통과, 만료 뒤 공격 요청 8건의 추가 거부 해제를 확인했습니다. 이 수치는 로컬 가상 경보 검증이며 공식 심판 판정이나 실제 운영 공격 차단 실적이 아닙니다.
 
+추가 검수에서 일반 머리글·요청 위치만 바꾼 동일 악용 패턴이 차단을 피하던 문제와 한국어로 표시된 비밀값의 가림 누락을 수정했습니다. 기존 지문 규칙을 보존해서 읽고 갱신하는 시험을 포함해 전용 검증 18개가 통과했습니다. 단독 판단 파일의 패턴과 원본 경보는 바꾸지 않았습니다.
+
 ## 기존 판정기에 추가하는 연결
 
 respond.mjs의 createResponder()가 respond(alert, result)와 wrapDecider(existingDecide)를 제공합니다. result를 넘겨도 원본 경보를 다시 판단하므로 임의의 block 표지만으로 규칙을 만들 수 없습니다. 기본 상태 파일은 xdr/state/known-cve-deny.json, 로그는 xdr/alerts.log입니다. 상태와 로그는 Git에서 제외합니다.
@@ -33,7 +35,7 @@ respond.mjs의 createResponder()가 respond(alert, result)와 wrapDecider(existi
 
 trustedEvidence는 서버/엔진이 해당 접속에서 직접 확인한 증거입니다. requestId는 이번 request.requestId와 같고, srcip와 useragent/headers/url/query/args/params는 경보의 data와 같은 형식입니다. 클라이언트가 보낸 증거 객체나 X-Forwarded-For를 그대로 신뢰하면 안 됩니다. 이 증거는 판정기 요청 객체에 새 필드로 덧붙이지 않습니다.
 
-기존 판정기의 deny·step_up는 그대로 반환합니다. 기존 판정기가 allow일 때만 추가 거부를 확인하며 출발 주소 지문과 공격 요청 지문이 모두 일치해야 거부합니다. 같은 IP의 다른 정상 요청이나 계정을 통째로 차단하지 않습니다. 거부 응답은 기존 다섯 항목을 유지하며 추가 ruleId는 xdr_known_cve, reasonCode는 xdr_known_cve_blocked입니다.
+기존 판정기의 deny·step_up는 그대로 반환합니다. 기존 판정기가 allow일 때만 추가 거부를 확인하며 출발 주소 지문과 명확한 악용 패턴이 모두 일치해야 거부합니다. 일반 머리글이나 요청 위치만 바꿔도 같은 악용 패턴이면 거부하지만, 같은 IP의 정상 요청과 약한 신호는 통과시킵니다. 요청 지문은 원본 경보의 감사 근거로 보관합니다. 예전 지문 규칙도 읽으며 다음 해당 경보 처리 시 패턴 규칙으로 갱신합니다. 거부 응답은 기존 다섯 항목을 유지하며 추가 ruleId는 xdr_known_cve, reasonCode는 xdr_known_cve_blocked입니다.
 
 현재 aleph.decision.v1의 18개 항목에는 출발 IP·원문 머리글·쿼리가 없습니다. 따라서 서버의 신뢰 가능한 증거 연결과 운영 등록부의 새 ruleId/reasonCode 등록은 엔진 통합 시 필요합니다. 이 저장점은 연결 함수와 기존 판정기를 함께 호출하는 로컬 재연까지 검증한 것이며, 반 엔진에 배포하거나 등록부를 변경하지 않았습니다.
 

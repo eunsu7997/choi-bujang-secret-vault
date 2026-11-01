@@ -125,6 +125,46 @@ test('같은 IP의 정상 요청과 다른 IP 요청은 통과하고 기존 거�
   await assert.rejects(() => gate(normal, { ...evidence(normal, alert), requestId: 'unrelated' }), /요청 증거/u);
 });
 
+test('일반 머리글이나 요청 위치가 달라도 같은 명확한 공격은 계속 거부한다', async () => {
+  const responder = await worker();
+  const alert = attack();
+  await responder.respond(alert);
+  const request = fixtureRequests().normal;
+  const gate = responder.wrapDecider();
+  const withHeader = { ...evidence(request, alert), headers: { Accept: 'application/json' } };
+  assert.equal((await gate(request, withHeader)).decision, 'deny');
+  const withUrl = { ...withHeader, url: '/login' };
+  assert.equal((await gate(request, withUrl)).decision, 'deny');
+  const inHeader = { requestId: request.requestId, srcip: alert.data.srcip,
+    headers: { 'User-Agent': alert.data.useragent } };
+  assert.equal((await gate(request, inHeader)).decision, 'deny');
+  const clean = { ...inHeader, headers: { 'User-Agent': 'class-browser' }, url: '/health' };
+  assert.equal((await gate(request, clean)).decision, 'allow');
+  const weak = { ...clean, url: '/search?q=CVE-2021-44228', useragent: 'nuclei' };
+  assert.equal((await gate(request, weak)).decision, 'allow');
+  const second = attack({ id: 'kc-02', data: { ...alert.data, url: '/login' } });
+  await responder.respond(second);
+  const state = JSON.parse(await readFile(responder.statePath, 'utf8'));
+  assert.equal(state.rules.length, 1);
+  assert.equal(state.rules[0].patternName, 'log4shell_remote_lookup');
+  assert.deepEqual(state.rules[0].alertIds, ['kc-01', 'kc-02']);
+});
+
+test('기존 지문 규칙도 읽고 새 경보 처리 시 패턴 범위로 갱신한다', async () => {
+  const responder = await worker();
+  const alert = attack();
+  await responder.respond(alert);
+  const state = JSON.parse(await readFile(responder.statePath, 'utf8'));
+  delete state.rules[0].patternName;
+  await writeFile(responder.statePath, JSON.stringify(state));
+  const request = fixtureRequests().normal;
+  assert.equal((await responder.wrapDecider()(request, evidence(request, alert))).decision, 'deny');
+  const updated = await responder.respond(alert);
+  assert.equal(updated.installed, true);
+  assert.equal(updated.disposition, 'installed');
+  assert.equal(JSON.parse(await readFile(responder.statePath, 'utf8')).rules[0].patternName, 'log4shell_remote_lookup');
+});
+
 test('중복·동시 경보는 규칙을 복제하거나 만료를 연장하지 않는다', async () => {
   let now = fixedNow;
   const responder = await worker({ clock: () => now });

@@ -8,6 +8,7 @@ import { decide as baseDecide, RULE_IDS as BASE_RULE_IDS } from '../../src/decid
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const RULE_ID = 'xdr_known_cve';
+const BLOCK_PATTERN = 'log4shell_remote_lookup';
 const SCHEMA = 'aleph.xdr.known-cve.deny.v1';
 const MAX_TTL_MS = 900000;
 const REQUEST_FIELDS = ['useragent', 'headers', 'url', 'query', 'args', 'params'];
@@ -73,6 +74,7 @@ export function createResponder({
     try { state = JSON.parse(raw); } catch { throw new Error('추가 거부 규칙 형식 오류'); }
     if (state?.schema !== SCHEMA || !Array.isArray(state.rules)
         || state.rules.some(rule => rule?.ruleId !== RULE_ID || rule.action !== 'deny'
+          || (rule.patternName !== undefined && rule.patternName !== BLOCK_PATTERN)
           || !hex(rule.sourceHash) || !hex(rule.requestFingerprint)
           || !Number.isFinite(Date.parse(rule.createdAt)) || !Number.isFinite(Date.parse(rule.expiresAt))
           || Date.parse(rule.expiresAt) <= Date.parse(rule.createdAt)
@@ -114,11 +116,14 @@ export function createResponder({
       if (protectedHashes.has(sourceHash)) disposition = 'protected_source';
       else {
         const requestFingerprint = fingerprint(alert.data);
-        const prior = state.rules.find(rule => rule.sourceHash === sourceHash && rule.requestFingerprint === requestFingerprint);
+        const prior = state.rules.find(rule => rule.sourceHash === sourceHash
+          && (rule.patternName === result.reason || (!rule.patternName && rule.requestFingerprint === requestFingerprint)));
         const createdAt = new Date(eventAt).toISOString();
         const expiresAt = new Date(eventAt + ttlMs).toISOString();
         if (prior) {
-          installed = !prior.alertIds.includes(alertId) || Date.parse(expiresAt) > Date.parse(prior.expiresAt);
+          installed = prior.patternName !== result.reason || !prior.alertIds.includes(alertId)
+            || Date.parse(expiresAt) > Date.parse(prior.expiresAt);
+          prior.patternName = result.reason;
           prior.alertIds = [...new Set([...prior.alertIds, alertId])];
           if (Date.parse(expiresAt) > Date.parse(prior.expiresAt)) {
             prior.createdAt = createdAt;
@@ -126,7 +131,7 @@ export function createResponder({
           }
           disposition = installed ? 'installed' : 'duplicate';
         } else {
-          state.rules.push({ ruleId: RULE_ID, action: 'deny', sourceHash, requestFingerprint,
+          state.rules.push({ ruleId: RULE_ID, action: 'deny', patternName: result.reason, sourceHash, requestFingerprint,
             createdAt, expiresAt, alertIds: [alertId] });
           installed = true;
           disposition = 'installed';
@@ -154,11 +159,13 @@ export function createResponder({
       }
       const ip = address(trustedEvidence.srcip);
       if (!ip) throw new Error('서버가 확인한 출발 주소가 필요합니다.');
-      if (protectedHashes.has(hash(ip)) || decide({ data: trustedEvidence }).action !== 'block') return original;
+      const current = decide({ data: trustedEvidence });
+      if (protectedHashes.has(hash(ip)) || current.action !== 'block') return original;
       const state = await load();
       const now = nowMs();
       const matched = state.rules.some(rule => active(rule, now) && rule.sourceHash === hash(ip)
-        && rule.requestFingerprint === fingerprint(trustedEvidence));
+        // 새 규칙은 같은 명확한 악용 패턴을 막습니다. 예전 규칙은 기존 지문 비교를 유지합니다.
+        && (rule.patternName === current.reason || (!rule.patternName && rule.requestFingerprint === fingerprint(trustedEvidence))));
       if (!matched) return original;
       return { ...original, decision: 'deny', reasonCode: 'xdr_known_cve_blocked',
         ruleIds: [...new Set([...original.ruleIds, RULE_ID])] };
