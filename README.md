@@ -3,12 +3,20 @@
 - 운영: https://choi-bujang-secret-vault-livid.vercel.app/
 - 저장소: https://github.com/eunsu7997/choi-bujang-secret-vault
 
+## 보너스 xdr-01 · 무차별 로그인 공격 탐지 (2026-11-01)
+
+- `xdr/brute-force/`에 경보 읽기, MITRE T1110 기반 패턴 목록, 외부 의존성 없는 `decide(alert)`, 만료되는 차단 규칙 연결 모듈을 추가했습니다. 원본 경보·기존 학생 판정기·12단계 화면과 제출 관측 코드는 유지합니다.
+- 확인 순서: `npm ci` → `node xdr/brute-force/read-alerts.mjs` → `npm run xdr:run -- brute-force` → `node xdr/brute-force/respond.mjs --fixture` → `node --test test/xdr-brute-force.test.mjs`.
+- 제공 가상 경보 28건: **block 10 · alert 9 · record 9**, 의미를 검토한 정상 이벤트 9건의 차단은 0건. 연결 재연에서 공격 거부 10건, 기타 경보 출발지 허용 18건, 별도 정상 요청 허용 28건입니다. 이 수치는 로컬 가상 경보 결과이며 공식 보너스 심판 점수가 아닙니다.
+- `result.json`은 순수 판단 결과를 제출용으로 저장합니다. `respond.mjs --fixture`는 가상 시각과 격리된 `artifacts/` 규칙 파일로 재연하며 운영 차단 파일을 바꾸지 않습니다. `xdr/alerts.log`, `xdr/state/`, `artifacts/`는 Git에서 제외합니다.
+- 연결 방식·유효기간·운영 제한은 [보너스 모듈 안내](xdr/brute-force/README.md)를 확인하세요. ALEPH 엔진에 실제 연결하려면 엔진이 검증한 접속 IP 전달과 추가 규칙 등록이 필요하며, 현재 저장소에는 외부 엔진 설정 API가 없습니다.
+
 ## 12단계 · 탈환 작전실을 완성합니다 (2026-11-01)
 
-### 최신 심판 메모의 공개 3건 미실행 처리 (2e04a60 이후, 이 저장점)
+### 최신 심판 메모의 공개 3건 미실행 처리 (검사 기준 커밋 `c33742ab2751`)
 - 최신 심판 메모는 첫 화면·manifest·aleph.json도 요청 기록이 없다고 명시했습니다. 이에 `http_root_ok`, `http_manifest_ok`, `http_aleph_json_ok` 세 요청을 보내지 않고 각각 `observed: "not_run"`으로 남깁니다. 이전 13개 미실행 항목의 ID·기대·관측값과 화면은 그대로 유지합니다.
 - 현재 제출 함수의 실제 네트워크 요청은 0건이며 16개 항목 모두 `not_run`입니다. 별도 로컬·운영 검증을 이 제출 실행의 증거로 대신하지 않습니다. `npm run bundle` 성공은 묶음 생성 성공이며 공식 점수나 공격 방어 통과를 뜻하지 않습니다.
-- 확인: `node --test test/step12-ops.test.mjs` → 저장점 커밋 → `npm run bundle`. 직전 묶음과 대조해 위 3개 observed만 바뀌었고 다른 점검 결과는 같음을 확인합니다. 공식 점수는 재채점 전 미확인입니다.
+- 확인: `node --test test/step12-ops.test.mjs` → 저장점 커밋 → `npm run bundle`. 직전 묶음과 대조해 위 3개 observed만 바뀌었고 다른 점검 결과는 같음을 확인합니다. 사용자가 전달한 공식 재채점 결과는 **100/100점·통과**, 검사 기준 커밋은 `c33742ab2751`입니다. 재제출은 필요하지 않습니다.
 
 ### 이전 심판 미기록 8건의 제출 관측 수정 (620b6d7부터 2e04a60까지)
 - 새 심판 메모의 3건(첫 화면·manifest·aleph.json)과 미기록 8건을 제출 JSON에 대조했습니다. 미기록 항목은 `http_data_json_hidden`, `http_notes_anon`, `http_note_item_anon`, `http_notes_forged`, `http_notices_anon`, `http_device_status_anon`, `http_ops_summary_anon`, `ops_page_served`입니다.
@@ -43,7 +51,7 @@
 - 절차: `npm run ops:probe` → 같은 표를 출력하고 `artifacts/ops-results.json`(Git 제외)에 저장합니다.
 - 공식 41종: 6~12단계 25종은 카드의 괴물 이름과 관련 시험으로 상태를 계산합니다(관련 시험이 하나라도 기대와 다르면 실측 실패, 일부만 실행했거나 로그인 토큰·반 엔진이 필요한 부분이 남으면 부분 실측, 모두 실행해 기대대로면 실측 통과, 하나도 실행 못 하면 미실행). 1~5단계 16종은 이 저장소에 공식 이름 기록이 없어 "이름 미기록 · 미실행"입니다. 이 구분은 공식 판정이 아니며, 화면의 "기대대로" 표시를 통과 근거로 쓰지 않습니다.
 
-### 제작 3 · 설치·실행·중지·복구 안내 (검사 기준: 11단계 보완 `d2808ed` + 이 12단계 저장점)
+### 제작 3 · 설치·실행·중지·복구 안내 (검사 기준 커밋 `c33742ab2751`)
 출처 구분: **제공 엔진 = ALEPH SDP 엔진**(반에서 제공·운영, 이 저장소에 엔진 코드 없음, 사용만 함 — 기기 인증서·mTLS·요청 서명·회수 연결·판정기 호출 담당). **학생 몫 = 이 저장소 전체**(판정기·탐지기·자료실 서버 함수·화면·SQL). 비밀값(Supabase 서버 키, 계정 비밀번호, 토큰, 기기 쿠키 값)은 저장소·제출 묶음에 넣지 않고 Vercel 환경변수와 각자 브라우저에만 둡니다.
 
 | 구성 | 설치 | 실행·확인 | 중지 | 복구 |
@@ -53,7 +61,7 @@
 | 접속 앱(설치형 웹앱) `public/` | 자료실 주소를 브라우저로 열고 "홈 화면에 추가" | 로그인 → 기기 승인 요청 → `supabase/device-approve.sql`로 승인 → 「승인 다시 확인」 | 로그아웃, 앱 삭제, 기기 승인 취소(`status='revoked'`) | 새 기기로 다시 승인 요청·승인. 서비스 워커는 오프라인 안내만 보관하므로 강력 새로고침(Ctrl+Shift+R)으로 최신 화면 |
 | 자료실(Vercel + Supabase) | Vercel에 저장소 연결, 환경변수 3개 입력, SQL은 `docs/DB_OWNERSHIP_RUNBOOK.md` 순서 + 10단계 `notes-step10-restore-point.sql` + 11단계 `device-approvals.sql` | `git push` → 자동 배포 → `/aleph.json` 커밋 확인 → `npm run ops:probe`, `npm run bundle` | Vercel 프로젝트 배포 일시 중지 또는 이전 배포로 롤백 | 코드: `git revert`(reset --hard 금지) 후 push. B 메모: `POST /api/restore/b4b4b4b4-0000-4000-8000-000000000001`. 확인: `notes-step10-check.sql` |
 
-- 재현 순서: ① `git clone` → `npm ci` ② `npm run decider:test`·`npm run detect:test`·`npm run policy:verify` ③ `node --test --test-concurrency=1 test/*.test.mjs` ④ 배포 후 `/aleph.json`의 커밋이 검사 커밋과 같은지 확인 ⑤ `npm run ops:probe`와 `/ops.html`의 표가 같은 기대·실제를 보이는지 대조 ⑥ `npm run bundle`.
+- 재현 순서: ① 별도 폴더에 `git clone` → `git checkout c33742ab2751` → `npm ci` ② `npm run decider:test`·`npm run detect:test`·`npm run policy:verify` ③ `node --test --test-concurrency=1 test/*.test.mjs` ④ 해당 커밋 배포 후 `/aleph.json`의 커밋이 검사 커밋과 같은지 확인 ⑤ `npm run ops:probe`와 `/ops.html`의 표가 같은 기대·실제를 보이는지 대조 ⑥ `npm run bundle`. 이후 보너스 작업은 최신 커밋의 별도 항목을 따릅니다.
 - 12단계 보완: `vercel.json`의 서버 함수 포함 파일에 `backup/policy/manifest.json`을 더했고(빠지면 서버 함수가 시작하지 못해 모든 API가 오류였음), 파일이 없어도 서버는 멈추지 않고 정책 사본 버전만 "확인 불가"로 둡니다. `npm run ops:probe` 실측에서 운영 API 응답이 기대와 달랐던 것을 보고 찾은 문제입니다.
 - 12단계 보완(심판 S12_BUNDLE_UNSUPPORTED 반영): 심판 격리 환경은 `node:fs`·`node:path`·`node:url`·`node:child_process`·`node:crypto`와 공개 HTTPS GET·HEAD만 허용합니다. `scripts/policy-backup.mjs`의 `node:os`(임시 폴더)를 환경변수로 바꾸고, `scripts/ops-probe.mjs`는 `node:fs`만 쓰며 GET·HEAD만 보냅니다. 쓰기 점검(비로그인 PUT 메모·PUT 관리 공지·POST 복구)은 보내지 않고 `not_run`으로 남깁니다(작전실 화면은 브라우저에서 같은 요청을 실제로 보내 확인).
 - 12단계 보완(심판 runner_import_failed 반영): 12단계 점검이 불러오는 파일을 `src/` 안으로 모았습니다. 점검 본체는 `src/ops-probe-core.mjs`(같은 폴더에서 불러옴), `src/ops-local.mjs`는 `scripts/fixture-7.mjs` 대신 같은 모양의 가상 요청을 직접 만들고, 정책 사본 확인도 이 파일 기준 상대 URL로 읽습니다. 불러오는 순간 경로를 계산하는 코드(`import.meta.dirname`, `fileURLToPath`)를 이 경로에서 없앴고, 그래도 불러오기에 실패하면 묶음을 멈추지 않고 그 점검만 미실행으로 남깁니다. `scripts/ops-probe.mjs`는 같은 본체를 쓰는 명령줄 입구입니다.

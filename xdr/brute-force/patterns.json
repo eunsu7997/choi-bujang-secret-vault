@@ -1,0 +1,29 @@
+[
+  {
+    "name": "repeated_password_guessing",
+    "condition": "같은 출발 주소·계정의 인증 실패가 집계되고, 5분 이내 30회 이상 또는 시간 미상인 고수준 상관 경보에서 40회 이상이면 차단 후보. 3회 이상은 알림 후보.",
+    "evidence": "MITRE T1110.001: 비밀번호를 반복·순차적으로 추측해 유효한 자격 증명을 찾는 행동.",
+    "source": "https://attack.mitre.org/techniques/T1110/001/",
+    "minFailures": 30,
+    "minUndatedFailures": 40,
+    "maxWindowSeconds": 300,
+    "minLevel": 10,
+    "alertFailures": 3
+  },
+  {
+    "name": "password_spraying",
+    "condition": "같은 주소가 서로 다른 계정 8개 이상에 같은 비밀번호를 대입했다는 명시적 근거와 수준 10 이상이 함께 있으면 차단 후보. 비밀번호 값은 읽지 않음.",
+    "evidence": "MITRE T1110.003: 하나 또는 소수의 비밀번호를 여러 계정에 시도하는 password spraying.",
+    "source": "https://attack.mitre.org/techniques/T1110/003/",
+    "minAccounts": 8,
+    "minLevel": 10
+  },
+  {
+    "name": "automated_account_guessing",
+    "condition": "같은 주소가 15개 이상 계정에 일정한 간격으로 인증 실패를 발생시키고 수준이 10 이상이면 자동화된 계정 대입 차단 후보.",
+    "evidence": "MITRE T1110: 계정 집합에 반복적·자동화된 비밀번호 추측을 수행하는 행동. 계정 수만으로 같은 비밀번호 사용을 추정하지 않음.",
+    "source": "https://attack.mitre.org/techniques/T1110/",
+    "minAccounts": 15,
+    "minLevel": 10
+  }
+]
