@@ -6,6 +6,7 @@
 ## 12단계 · 탈환 작전실을 완성합니다 (2026-11-01)
 
 ### 요청 기록 연결 보완 (기준 커밋: b625a3e)
+- 추가 보완(48db78e 이후): `attack-check.mjs`의 실행 환경에서 만든 요청 함수를 `runOpsProbe`에 명시적으로 전달합니다. 이 함수가 받은 응답을 attackId별로 저장해 observed를 만들며, 모든 값을 일괄 not_run으로 덮어쓰지 않습니다. 별도 VM의 기록용 fetch와 가져온 모듈의 fetch를 분리한 회귀 검사로 기록 경로를 확인했습니다. 전체 로컬 검사 161 통과·1 건너뜀(공식 판정 아님).
 - 운영 요청 URL을 문자열로 전달하고 x-attack-id와 x-request-id를 실제 요청에 함께 보냅니다. 제출 observed에는 실제 HTTP 상태, 메서드·경로, attackId, 전송 요청 ID, 응답의 서버 ID와 확인 시각만 연결합니다.
 - GET·HEAD 이외 요청과 응답을 받지 못한 요청은 not_run이며 요청 ID·서버 ID를 채우지 않습니다. 화면과 DB는 변경하지 않았습니다.
 - 재현: npm install → node --test --test-concurrency=1 test/*.test.mjs → npm run bundle. 단, bundle 전에는 로컬 bundle-notes.json을 작성하고 저장점을 커밋해야 합니다. 공식 점수와 로그인·반 엔진 시험은 재채점 전 미검증입니다.

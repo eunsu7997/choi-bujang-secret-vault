@@ -433,18 +433,29 @@ async function twelfthStepChecks(config, app) {
     return [{ attackId: 'ops_probe_import', expected: '탈환 작전실 점검 본체(src/ops-probe-core.mjs)를 불러와 실제 요청을 보냄',
       observed: `미실행 (불러오기 실패: ${String(error?.code ?? error?.name ?? 'unknown').slice(0, 60)})` }];
   }
-  const report = await runOpsProbe({ base: app });
+  // 요청은 이 실행 환경의 fetch를 통과시킵니다. 가져온 모듈의 기본 fetch는
+  // 별도 실행 환경에서 심판의 요청 기록기를 우회할 수 있으므로 사용하지 않습니다.
+  const responses = new Map();
+  const report = await runOpsProbe({ base: app, fetchImpl: async (url, init) => {
+    const response = await fetch(String(url), init);
+    const attackId = init.headers['x-attack-id'];
+    responses.set(attackId, { status: response.status, requestId: init.headers['x-request-id'],
+      serverId: response.headers.get('x-vercel-id'), method: init.method,
+      path: new URL(url).pathname, at: new Date().toISOString() });
+    return response;
+  } });
   const http = report.rows.filter(row => row.where === '운영 API 실제 요청').map(row => ({
     attackId: row.id, expected: `${row.stage}단계 ${row.kind} · ${row.label} → ${row.expected}`,
-    // 심판이 이 13개 점검의 요청 기록을 확인하지 못했습니다.
-    // 로컬 응답을 심판 기록으로 대신하지 않고, 연결 검증 전에는 상태·ID를 제출하지 않습니다.
-    observed: 'not_run',
+    observed: !responses.has(row.id) ? 'not_run' : (() => {
+      const sent = responses.get(row.id);
+      return `HTTP ${sent.status} · ${sent.method} ${sent.path} · attackId ${row.id} · 요청ID ${sent.requestId}${sent.serverId ? ` · 서버ID ${sent.serverId}` : ''} · ${sent.at}`;
+    })(),
   }));
   const local = report.rows.filter(row => row.where !== '운영 API 실제 요청');
   return [
     ...http,
     await observe('ops_page_served', '/ops.html 탈환 작전실이 열리고 메모 본문 표시·innerHTML을 쓰지 않음', async () => {
-      const response = await fetch(new URL('/ops.html', app), { redirect: 'error', signal: AbortSignal.timeout(10000) });
+      const response = await fetch(new URL('/ops.html', app).href, { redirect: 'error', signal: AbortSignal.timeout(10000) });
       const html = response.ok ? await response.text() : '';
       return `HTTP ${response.status}, 작전실 ${html.includes('탈환 작전실') ? '있음' : '없음'}, innerHTML ${/innerHTML/u.test(html) ? '사용' : '없음'}`;
     }),

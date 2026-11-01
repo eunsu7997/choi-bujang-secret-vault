@@ -101,6 +101,39 @@ test('submission evidence matches captured requests and never invents responses 
   } finally { globalThis.fetch = original; }
 });
 
+test('separate checker realm records imported probe requests through its own fetch', async () => {
+  const source = await read('src/attack-check.mjs');
+  const body = source.slice(source.indexOf('async function twelfthStepChecks'), source.indexOf('export async function runAttackChecks'))
+    .replace("import('./ops-probe-core.mjs')", 'loadCore()');
+  const recorded = [];
+  const oldFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error('imported module must not use host fetch'); };
+  try {
+    const check = vm.runInNewContext(`(${body})`, {
+      loadCore: async () => ({ runOpsProbe }), URL, AbortSignal,
+      observe: async (attackId, expected, run) => ({ attackId, expected, observed: await run() }),
+      fetch: async (url, init) => {
+        assert.equal(typeof url, 'string');
+        const id = init.headers?.['x-attack-id'];
+        if (!id) return new Response('탈환 작전실');
+        if (id === 'http_manifest_ok') throw new TypeError('network failed');
+        const probe = catalog.HTTP_PROBES.find(p => p.id === id);
+        const status = id === 'http_notes_anon' ? 503 : probe.expect[0];
+        recorded.push({ id, status });
+        return new Response(null, { status });
+      },
+    });
+    const rows = await check({}, new URL('https://example.test/'));
+    for (const probe of catalog.HTTP_PROBES) {
+      const actual = rows.find(r => r.attackId === probe.id).observed;
+      const sent = recorded.find(r => r.id === probe.id);
+      if (sent) assert.ok(actual.startsWith(`HTTP ${sent.status} ·`), `${probe.id}: ${actual}`);
+      else assert.equal(actual, 'not_run');
+    }
+    assert.equal(recorded.length, 9);
+  } finally { globalThis.fetch = oldFetch; }
+});
+
 test('ops summary API: login required, approved device for browser, header path works, no memo bodies', async () => {
   const db = fakeSupabase();
   const handler = createNotesHandler({ getVerifier: () => verify, getStore: () => supabaseNotesStore(db), writesEnabled: true,
