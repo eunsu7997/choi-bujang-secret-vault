@@ -13,7 +13,9 @@ import { runLocalProbes } from '../src/ops-local.mjs';
 import { deviceAction, deviceCode, deviceCookie, deviceHash, newDeviceSecret, readDeviceSecret, supabaseDeviceStore } from '../src/device-approval.mjs';
 
 const appConfig = createRequire(import.meta.url)('../aleph.config.json');
-const policyManifest = createRequire(import.meta.url)('../backup/policy/manifest.json');
+// 12단계: 안전 정책 사본 버전. 배포본에 파일이 없어도 서버가 멈추지 않도록 실패하면 null("확인 불가")로 둡니다.
+let policyManifest = null;
+try { policyManifest = createRequire(import.meta.url)('../backup/policy/manifest.json'); } catch { policyManifest = null; }
 const MAX_NOTES = 50;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const ALLOWED_METHODS = 'GET, POST, PUT, DELETE';

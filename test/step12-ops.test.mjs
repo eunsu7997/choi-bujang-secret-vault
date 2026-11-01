@@ -164,3 +164,12 @@ test('ops page never renders memo bodies or uses innerHTML/browser storage', asy
   assert.doesNotMatch(html, /\/api\/notes['`]/u);
   assert.match(html, /메모 본문은 표시하지 않습니다/u);
 });
+
+test('server function bundle includes every file api/notes.js reads at runtime', async () => {
+  const config = JSON.parse(await read('vercel.json'));
+  const include = config.functions['api/notes.js'].includeFiles;
+  const source = await read('api/notes.js');
+  for (const match of source.matchAll(/createRequire\(import\.meta\.url\)\('\.\.\/([^']+)'\)/gu)) {
+    assert.ok(include.includes(match[1]), `${match[1]} must be in includeFiles`);
+  }
+});
