@@ -7,8 +7,8 @@
     "record": 55
   },
   "tests": {
-    "total": 228,
-    "passed": 227,
+    "total": 229,
+    "passed": 228,
     "failed": 0,
     "skipped": 1
   },
@@ -47,8 +47,8 @@
     "xdr/privilege/patterns.json": "05cbde1b2269ba3a0f8230f2b424913e2219b5e01c26b6ea8b58a1be8087d59e",
     "xdr/privilege/read-alerts.mjs": "57adfeda18affdb128be5b64723b4af8ba475cad88ef47d64dfe93f3e79118df",
     "xdr/privilege/respond.mjs": "9772337d37dad4ea8a8596ab3afa5c01fb84a08b25913398727b45c9e0c13335",
-    "xdr/exfiltration/decide.mjs": "0a366aca9402b19f0ae246308748b228dcabad40fbf1290c38e599f22438f1c7",
-    "xdr/exfiltration/patterns.json": "d7d108c0eb08f27e75ac9943cd1f4d076c1966ecbec95eeca49902effb6d2358",
+    "xdr/exfiltration/decide.mjs": "b3e036b7784ada0ae09872df5ac74753fd27c59b35bc0861a0ed68c7d287a6c9",
+    "xdr/exfiltration/patterns.json": "60c70c9c7afdd53d817f81f614747fec5b7a3b9bab23e2f10ed2b44b7629d747",
     "xdr/exfiltration/read-alerts.mjs": "6f0f26e0c897fe5784244319c405512ee6079408eeedeccb0a83deb76fb3d913",
     "xdr/exfiltration/respond.mjs": "bdf06dc4d94f2a29048585903e9504dd054e2ed240915e7b0aa0113dbe88b9ac"
   },

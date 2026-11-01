@@ -84,6 +84,24 @@ test('크기·수준·기법 태그만으로 차단하지 않으며 실패·잘�
   }
 });
 
+test('이미 차단·취소된 전송은 새 거부 규칙을 설치하지 않음', async () => {
+  const s = await setup();
+  for (const description of [
+    '처음 보는 목적지로 압축 파일 전송을 차단했습니다.',
+    '처음 보는 목적지로 파일 전송이 취소됐습니다.',
+    '업무 시간 밖에 전송이 차단되었습니다.',
+  ]) {
+    const alert = { ...s.attack, rule: { ...s.attack.rule, description } };
+    assert.equal(decide(alert).action, 'alert');
+    assert.equal((await s.worker.respond(alert)).installed, false);
+  }
+  assert.equal(JSON.parse(await readFile(s.statePath)).rules.length, 0);
+  // 차단이라는 단어가 있어도 전송 성공을 말하는 경우에는 실제 공격 신호를 보존합니다.
+  const successful = { ...s.attack, rule: { ...s.attack.rule,
+    description: '차단 규칙을 우회해 처음 보는 목적지로 파일 전송이 완료됐습니다.' } };
+  assert.equal(decide(successful).action, 'block');
+});
+
 async function setup(options = {}) {
   const parent = join(root, 'artifacts');
   await mkdir(parent, { recursive: true });

@@ -18,7 +18,7 @@ const PATTERNS = [
   },
   {
     "name": "unconfirmed_transfer",
-    "condition": "소량 신규 목적지·일시적 전송량 증가·압축 준비·실패·명령 통로 소량 자료는 알림. 크기만으로 차단하지 않음.",
+    "condition": "소량 신규 목적지·일시적 전송량 증가·압축 준비·실패·전송 차단/취소·명령 통로 소량 자료는 알림. 크기만으로 차단하지 않음.",
     "evidence": "MITRE T1041·T1048의 전송 행위는 목적지·통로·실제 전송 등 문맥 확인이 필요하며 크기만으로 악용을 단정하지 않음.",
     "source": "https://attack.mitre.org/techniques/T1048/"
   }
@@ -53,7 +53,7 @@ export function decide(alert) {
   const novelty = /처음\s*보는|처음\s*봅|처음\s*봅니다|평소와\s*다른|처음\s*봅니다/u.test(s);
   const outOfHours = /(?:수업|업무)\s*시간\s*밖/u.test(s);
   const unusual = novelty || outOfHours || /쓰지\s*않던\s*포트|전체가\s*외부|압축.*연속/u.test(s) || count >= p.minCount;
-  const failed = /실패|전송은\s*아직\s*없|외부\s*전송.*없/u.test(s);
+  const failed = /실패|전송은\s*아직\s*없|외부\s*전송.*없|전송[^.\n]{0,40}(?:차단|취소)(?:했|됐|되었|됨|합니다)/u.test(s);
   if (!failed && hasDestination && bytes >= p.minBytes && number(alert.rule.level) >= p.minLevel) {
     if (c2 && count >= p.minCount) return answer(0.96, PATTERNS[1].name);
     if (unusual) return answer(0.94, p.name);
