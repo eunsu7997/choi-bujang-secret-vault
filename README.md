@@ -1,7 +1,15 @@
-# BYTE BACK 방어전 R5 · 5단계
+# BYTE BACK 방어전 R5 · 6단계
 
 - 운영: https://choi-bujang-secret-vault-livid.vercel.app/
 - 저장소: https://github.com/eunsu7997/choi-bujang-secret-vault
+
+## 6단계 · 등록한 기기만 자료실에 들어옵니다 (2026-11-01)
+
+- `src/decider.mjs`에 규칙 `device_registered` 하나를 넣었습니다. `docs/DECIDER_REQUEST.md` 계약의 `deviceRegistered`가 정확히 `true`일 때만 `allow · approved`, `false`·값 없음·그 밖의 값은 `deny · device_not_registered`입니다. 응답은 다섯 항목(schema·requestId·decision·reasonCode·ruleIds)만 돌려주고, `RULE_IDS`에는 구현한 `device_registered`만 남겼습니다(시작 틀 `starter.deny` 제거).
+- 판정기는 계약에 있는 요청 이름만 읽습니다. 계약에 없는 역할·신원·기기 객체·위치 값은 쓰지 않습니다. 인증서·CA·서명 키·기기 개인키는 만들거나 저장소에 넣지 않았습니다. 이번 단계에는 따로 설치할 접속 프로그램이 없습니다.
+- 기존 자료실 주소, 화면, `/api/notes` 서버 함수, 4~5단계 소유자 검사·DB 권한은 그대로입니다. 등록 기기면 자료실 동작(읽기 포함)을 그대로 허용합니다.
+- 확인 순서: ① `npm ci` ② `npm run decider:test` → `통과 · 등록 기기의 정상 요청`, `통과 · 미등록 기기의 가상 요청` 두 줄 ③ `node --test --test-concurrency=1 test/*.test.mjs` (`test/step6-decider.test.mjs`가 false·값 없음·null·문자열 등 거부와 응답 형식을 확인) ④ 커밋 후 `npm run bundle` → 6단계 자기 점검에 판정기 가상 요청 3건과 5단계 운영 점검이 함께 기록됩니다.
+- `npm run decider:test`와 bundle의 판정기 점검은 로컬 가상 요청 연습이며 심판 판정이 아닙니다. 미등록 기기 공격은 심판이 맡습니다. `npm run fixture:7`(7단계 step_up 연습)은 아직 구현 전이라 실패하는 것이 정상입니다.
 
 ## 5단계 가점 · 화면에서 Supabase 공개 키 없애기 (브랜치 step5-server-login)
 
@@ -71,7 +79,7 @@ PM 직접 로그인 세션에서 별도로 실행한 A/B 시험은 원본 로그
 
 ## 실행과 DB 보존
 
-의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step5, Supabase identityProvider, allowedRoutes=[/api/notes, /api/notes/:id, /api/auth/login, /api/auth/session, /api/auth/logout], originalApiUrl=원본 notes REST 경로입니다.
+의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step6, Supabase identityProvider, allowedRoutes=[/api/notes, /api/notes/:id, /api/auth/login, /api/auth/session, /api/auth/logout], originalApiUrl=원본 notes REST 경로입니다.
 
 환경변수 이름은 SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_PUBLISHABLE_KEY입니다. 값은 코드·대화·로그에 적지 않습니다. 현재 DB에서 notes.sql/백업/소유권 SQL을 처음부터 재실행하지 않습니다. 새 환경의 최초 구축은 `docs/DB_OWNERSHIP_RUNBOOK.md`를 현재 스키마와 PM 승인에 대조해 수행합니다.
 

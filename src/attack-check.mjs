@@ -272,11 +272,31 @@ async function fifthStepChecks(config, app) {
   ];
 }
 
+// 6단계: 판정기 device_registered 규칙을 가상 요청으로 직접 호출한 결과입니다(로컬 실행, 심판 판정 아님).
+async function sixthStepChecks(config, app) {
+  const { decide } = await import('./decider.mjs');
+  const { fixtureRequests } = await import('../scripts/fixture-7.mjs');
+  const { normal } = fixtureRequests();
+  const run = async (attackId, expected, overrides) => observe(attackId, expected, async () => {
+    const request = { ...normal, requestId: crypto.randomUUID(), ...overrides };
+    if (overrides.deviceRegistered === undefined) delete request.deviceRegistered;
+    const result = await decide(request);
+    return `로컬 가상 요청: ${result.decision} · ${result.reasonCode} · ${result.ruleIds.join(',')}`;
+  });
+  return [
+    await run('decider_registered_device_allowed', '등록 기기(deviceRegistered: true) 가상 요청은 allow', { deviceRegistered: true }),
+    await run('decider_unregistered_device_denied', '미등록 기기(deviceRegistered: false) 가상 요청은 deny · device_not_registered', { deviceRegistered: false }),
+    await run('decider_missing_device_flag_denied', '기기 등록 값이 없는 가상 요청도 deny · device_not_registered', { deviceRegistered: undefined }),
+    ...(await fifthStepChecks(config, app)),
+  ];
+}
+
 export async function runAttackChecks(config) {
   if (config.step === 1) return firstStepChecks(config, appUrl(config));
   if (config.step === 2) return secondStepChecks(config, appUrl(config));
   if (config.step === 3) return thirdStepChecks(config, appUrl(config));
   if (config.step === 4) return fourthStepChecks(config, appUrl(config));
   if (config.step === 5) return fifthStepChecks(config, appUrl(config));
+  if (config.step === 6) return sixthStepChecks(config, appUrl(config));
   throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
 }

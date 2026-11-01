@@ -26,7 +26,7 @@ test('step 5 SQL revokes every direct notes privilege and keeps the server role'
 
 test('config names the query-free original data API and keeps allowed routes', async () => {
   const config = JSON.parse(await read('aleph.config.json'));
-  assert.equal(config.step, 5);
+  assert.ok(config.step >= 5);
   const url = new URL(config.originalApiUrl);
   assert.equal(url.protocol, 'https:');
   assert.equal(url.search, '');
