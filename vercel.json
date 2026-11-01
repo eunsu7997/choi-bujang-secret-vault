@@ -17,6 +17,10 @@
       "destination": "/api/notes?zone=admin-notices&id=:id"
     },
     {
+      "source": "/api/ops/:action",
+      "destination": "/api/notes?ops=:action"
+    },
+    {
       "source": "/api/device/:action",
       "destination": "/api/notes?device=:action"
     },
