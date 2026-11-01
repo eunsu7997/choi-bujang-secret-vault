@@ -1,7 +1,16 @@
-# BYTE BACK 방어전 R5 · 6단계
+# BYTE BACK 방어전 R5 · 7단계
 
 - 운영: https://choi-bujang-secret-vault-livid.vercel.app/
 - 저장소: https://github.com/eunsu7997/choi-bujang-secret-vault
+
+## 7단계 · 평소와 다른 접속은 다시 확인합니다 (2026-11-01)
+
+- 제작 1(입력 검사): `src/decider.mjs`는 `signals.source`가 엔진이 검증해 넘긴 가상 사건(`judge_fixture`)일 때만 지역·네트워크·시각을 근거로 씁니다. 실제 경로의 `source: "none"`, 클라이언트 헤더 등 출처가 불명확한 값은 무시하고, `unknown`·빈 값·범위 밖 시각은 정상값으로 채우지 않고 "모름"으로 둡니다. `recentEvents`는 엔진이 만든 최근 사건이며 최근 10분 건수만 셉니다.
+- 제작 2(규칙 `step_up_required`): 이상 근거 4가지(새벽 0~5시, 평소와 다른 네트워크, 평소와 다른 지역, 최근 10분 10건 이상) 중 **2개 이상** 겹치면 `step_up · step_up_required`로 추가 확인(다시 로그인)을 요구합니다. 지역 하나만으로는 차단·추가 확인을 하지 않고, 차단 대신 추가 확인이므로 영구 차단이 아닙니다. 응답은 다섯 항목만 돌려주므로 근거별 사유는 코드 주석과 이 기록에 남깁니다. 6단계 `device_registered`는 먼저 검사하며 그대로입니다(미등록은 추가 확인과 관계없이 deny).
+- 다시 허용: `stepUp.verified`가 true이고 추가 확인 후 300초 이내일 때만 같은 복합 사건을 allow합니다. 900초처럼 오래됐거나 verified가 true가 아니면 다시 step_up입니다.
+- 제작 3: 저장소의 판정 계약에는 `stepUp` 값만 있고, 제공 엔진이 같은 로그인으로 다시 로그인한 시각을 검증해 자료를 막고 새 요청을 다시 판정하는 계약은 없습니다. 그래서 가상 사건 규칙만 시험했고 실제 자료 차단·재로그인 실측은 **미실행**입니다. 토큰 원문은 기록하지 않습니다. 민감 메모 구분 값도 계약에 없어 메모별 추가 확인은 하지 않습니다.
+- 확인 순서: ① `npm ci` ② `npm run decider:test` → 통과 4줄(등록 기기 정상, 미등록 기기, 복합 이상 접속, 다시 확인한 복합 이상 접속) ③ `npm run fixture:7` → `정상 사건: allow`, `복합 이상 사건: step_up` ④ `node --test --test-concurrency=1 test/*.test.mjs` (`test/step7-step-up.test.mjs`: 단일 근거·지역만 변경은 allow, 위조 출처 무시, 오래된 재인증 거부 등) ⑤ 커밋 후 `npm run bundle`.
+- 위 명령은 모두 로컬 가상 요청 연습이며 심판 판정이 아닙니다.
 
 ## 6단계 · 등록한 기기만 자료실에 들어옵니다 (2026-11-01)
 
@@ -79,7 +88,7 @@ PM 직접 로그인 세션에서 별도로 실행한 A/B 시험은 원본 로그
 
 ## 실행과 DB 보존
 
-의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step6, Supabase identityProvider, allowedRoutes=[/api/notes, /api/notes/:id, /api/auth/login, /api/auth/session, /api/auth/logout], originalApiUrl=원본 notes REST 경로입니다.
+의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step7, Supabase identityProvider, allowedRoutes=[/api/notes, /api/notes/:id, /api/auth/login, /api/auth/session, /api/auth/logout], originalApiUrl=원본 notes REST 경로입니다.
 
 환경변수 이름은 SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_PUBLISHABLE_KEY입니다. 값은 코드·대화·로그에 적지 않습니다. 현재 DB에서 notes.sql/백업/소유권 SQL을 처음부터 재실행하지 않습니다. 새 환경의 최초 구축은 `docs/DB_OWNERSHIP_RUNBOOK.md`를 현재 스키마와 PM 승인에 대조해 수행합니다.
 

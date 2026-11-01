@@ -291,6 +291,30 @@ async function sixthStepChecks(config, app) {
   ];
 }
 
+// 7단계: 판정기 step_up_required 규칙을 가상 사건으로 직접 호출한 결과입니다(로컬 실행, 심판 판정 아님).
+// 실제 재로그인 시각을 검증하는 엔진 계약이 없어 실제 자료 차단은 미실행으로 남깁니다.
+async function seventhStepChecks(config, app) {
+  const { decide } = await import('./decider.mjs');
+  const { fixtureRequests } = await import('../scripts/fixture-7.mjs');
+  const { normal, suspicious } = fixtureRequests();
+  const run = (attackId, expected, base, changes) => observe(attackId, expected, async () => {
+    const result = await decide({ ...base, requestId: crypto.randomUUID(), ...changes });
+    return `로컬 가상 요청: ${result.decision} · ${result.reasonCode} · ${result.ruleIds.join(',')}`;
+  });
+  return [
+    await run('decider_normal_access_allowed', '정상 사건(평소 지역·네트워크·시각, 대량 접근 없음)은 allow', normal, {}),
+    await run('decider_composite_unusual_step_up', '평소와 다른 시각·낯선 네트워크·대량 접근이 겹친 사건은 step_up · step_up_required', suspicious, {}),
+    await run('decider_fresh_step_up_allowed', '추가 확인을 마친 지 5분 안의 같은 사건은 allow', suspicious, { stepUp: { verified: true, authAgeSeconds: 60 } }),
+    await run('decider_region_only_not_blocked', '지역만 바뀐 사건은 차단하지 않고 allow', normal, { signals: { ...normal.signals, region: 'foreign' } }),
+    await run('decider_forged_signal_ignored', '출처가 클라이언트 헤더인 접속 정보는 근거로 쓰지 않음(allow)', normal,
+      { signals: { source: 'client_header', region: 'foreign', network: 'unusual', hour: 3 } }),
+    await run('decider_unregistered_device_denied', '미등록 기기 가상 요청은 deny · device_not_registered', normal, { deviceRegistered: false }),
+    { attackId: 'relogin_engine_block', expected: '엔진이 새 로그인 시각을 검증한 뒤에만 자료를 다시 허용',
+      observed: '미실행 (재로그인 시각을 검증하는 엔진 계약이 아직 없어 가상 사건 규칙만 시험)' },
+    ...(await fifthStepChecks(config, app)),
+  ];
+}
+
 export async function runAttackChecks(config) {
   if (config.step === 1) return firstStepChecks(config, appUrl(config));
   if (config.step === 2) return secondStepChecks(config, appUrl(config));
@@ -298,5 +322,6 @@ export async function runAttackChecks(config) {
   if (config.step === 4) return fourthStepChecks(config, appUrl(config));
   if (config.step === 5) return fifthStepChecks(config, appUrl(config));
   if (config.step === 6) return sixthStepChecks(config, appUrl(config));
+  if (config.step === 7) return seventhStepChecks(config, appUrl(config));
   throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
 }
