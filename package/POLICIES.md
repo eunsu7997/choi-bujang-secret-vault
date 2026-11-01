@@ -6,6 +6,7 @@
 |---|---|---|---|
 | device_registered | 6 | 미등록 기기의 자료실 요청 | test/step6-decider.test.mjs, npm run decider:test |
 | step_up_required | 7 | 새벽·낯선 네트워크·지역 변경·대량 접근이 2개 이상 겹친 접속(추가 확인) | test/step7-step-up.test.mjs, npm run fixture:7 |
+| burst_read | 9 | 같은 가명 사용자의 10분 안 121건 이상 조회(회수 제안) | test/step9-detect.test.mjs, npm run detect:test |
 | resource_zone | 8 | 메모 전체 목록, 반 공지 쓰기, 강사 자료, 알 수 없는 경로·쿼리 기능 선택 | test/step8-zones.test.mjs |
 
 브라우저에서 버튼을 숨기는 것만으로 서버 접근이 차단됐다고 적지 마세요.

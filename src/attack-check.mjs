@@ -344,6 +344,30 @@ async function eighthStepChecks(config, app) {
   ];
 }
 
+// 9단계: 탐지기 burst_read 규칙을 가상 사건으로 직접 호출한 결과입니다(로컬 실행, 심판 판정 아님).
+// 운영 반 엔진의 사건 전달·접속 회수 연결은 이 저장소에서 시험하지 않아 미실행으로 남깁니다.
+async function ninthStepChecks(config, app) {
+  const { detect } = await import('./detect.mjs');
+  const start = Date.UTC(2026, 9, 1);
+  const reads = (count, gap, sub = 'learner_fixture') => Array.from({ length: count }, (_, i) => ({
+    at: new Date(start + i * gap * 1000).toISOString(), method: 'GET', identity: { sub } }));
+  const run = (attackId, expected, events) => observe(attackId, expected, async () => {
+    const result = detect(events);
+    return `로컬 가상 사건: ${result.action}${result.reasonCode ? ` · ${result.reasonCode}` : ''}`;
+  });
+  return [
+    await run('detect_normal_reads_observe', '정상 조회 30건은 observe', reads(30, 2)),
+    await run('detect_exact_120_observe', '10분 안 정확히 120건은 observe', reads(120, 2)),
+    await run('detect_burst_121_revoke', '10분 안 121건은 propose_revocation · burst_read', reads(121, 2)),
+    await run('detect_mixed_users_observe', '서로 다른 사용자 각 100건은 합치지 않아 observe', [...reads(100, 2), ...reads(100, 2, 'other_fixture')]),
+    await run('detect_slow_reads_observe', '10분 밖으로 흩어진 조회 200건은 observe', reads(200, 7)),
+    { attackId: 'engine_revocation_link', expected: '반 엔진이 회수 제안을 받아 회수된 신원·세션의 다음 요청을 거부',
+      observed: '미실행 (운영 반 엔진의 사건 전달·접속 회수 연결은 이 저장소에서 시험하지 않음)' },
+    // 자기 점검은 최대 20개라 운영 기본 점검(5단계)만 이어 붙입니다. 8단계 구역 점검은 test/step8-zones.test.mjs로 유지합니다.
+    ...(await fifthStepChecks(config, app)),
+  ];
+}
+
 export async function runAttackChecks(config) {
   if (config.step === 1) return firstStepChecks(config, appUrl(config));
   if (config.step === 2) return secondStepChecks(config, appUrl(config));
@@ -353,5 +377,6 @@ export async function runAttackChecks(config) {
   if (config.step === 6) return sixthStepChecks(config, appUrl(config));
   if (config.step === 7) return seventhStepChecks(config, appUrl(config));
   if (config.step === 8) return eighthStepChecks(config, appUrl(config));
+  if (config.step === 9) return ninthStepChecks(config, appUrl(config));
   throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
 }

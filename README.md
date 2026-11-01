@@ -1,7 +1,15 @@
-# BYTE BACK 방어전 R5 · 8단계
+# BYTE BACK 방어전 R5 · 9단계
 
 - 운영: https://choi-bujang-secret-vault-livid.vercel.app/
 - 저장소: https://github.com/eunsu7997/choi-bujang-secret-vault
+
+## 9단계 · 도플갱어를 찾고 권한을 거둡니다 (2026-11-01)
+
+- 제작 1(입력 처리): `src/detect.mjs`는 `docs/DETECT_EVENTS.md`대로 사건마다 `at`·`method`·`identity.sub` 세 값만 읽습니다. 형식이 맞지 않는 사건(시각 해석 불가, sub 없음 등)은 세지 않고, 네트워크·기기·지역 값은 만들거나 조건으로 쓰지 않습니다. 메모 내용·토큰·실명은 저장·출력하지 않습니다.
+- 제작 2(규칙 `burst_read`): 같은 `identity.sub`의 `GET` 사건만 모아 `at` 시각으로 정렬하고, 어느 10분 구간(첫 사건부터 600초 미만)에서든 **120건을 넘으면**(121건 이상) 의심으로 봅니다. 정확히 120건, 10분 밖으로 흩어진 사건, 다른 사용자의 사건, GET이 아닌 사건은 합치지 않습니다. 여러 사용자가 넘으면 가장 먼저 넘은 한 명만 제안합니다.
+- 제작 3(결과): 의심이면 정확히 `{action:"propose_revocation", reasonCode:"burst_read", subject: sub}`, 아니면 `{action:"observe"}`만 돌려줍니다. 기기 번호 등 다른 키는 붙이지 않고, 판정기 응답 형식·회수 API·기기 권한은 바꾸지 않았습니다. 정상 사건은 observe이므로 정상 기기는 그대로입니다.
+- 확인 순서: ① `npm ci` ② `npm run detect:test` → 통과 6줄(정상 30건, 10분 안 120건, 121건, 폭주 200건, 다른 사용자 각 100건, 흩어진 200건) ③ `node --test --test-concurrency=1 test/*.test.mjs` (`test/step9-detect.test.mjs`: 정확히 600초에 걸친 121건은 observe, 입력 순서 무관, GET 외 사건 제외, 잘못된 사건 무시, 세 값만 읽기) ④ 커밋 후 `npm run bundle`.
+- `npm run detect:test`가 통과해도 운영 반 엔진의 사건 전달·접속 회수가 연결됐다는 뜻은 아닙니다. 회수된 신원·세션의 재시도 차단은 이 저장소에서 실측하지 않았습니다(미실행).
 
 ## 8단계 · 자료마다 갈 수 있는 구역을 나눕니다 (2026-11-01)
 
@@ -98,7 +106,7 @@ PM 직접 로그인 세션에서 별도로 실행한 A/B 시험은 원본 로그
 
 ## 실행과 DB 보존
 
-의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step8, Supabase identityProvider, allowedRoutes=[GET·PUT·DELETE /api/notes/:id, GET /api/notices, GET /api/notices/:id](판정기가 허용하는 경로만), originalApiUrl=원본 notes REST 경로입니다.
+의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step9, Supabase identityProvider, allowedRoutes=[GET·PUT·DELETE /api/notes/:id, GET /api/notices, GET /api/notices/:id](판정기가 허용하는 경로만), originalApiUrl=원본 notes REST 경로입니다.
 
 환경변수 이름은 SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_PUBLISHABLE_KEY입니다. 값은 코드·대화·로그에 적지 않습니다. 현재 DB에서 notes.sql/백업/소유권 SQL을 처음부터 재실행하지 않습니다. 새 환경의 최초 구축은 `docs/DB_OWNERSHIP_RUNBOOK.md`를 현재 스키마와 PM 승인에 대조해 수행합니다.
 
