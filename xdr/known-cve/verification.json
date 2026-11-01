@@ -1,0 +1,18 @@
+{
+  "schema": "aleph.xdr.known-cve.verification.v1",
+  "mode": "isolated-fixture-clock",
+  "counts": {
+    "block": 8,
+    "alert": 8,
+    "record": 8
+  },
+  "checks": {
+    "attacksDenied": 8,
+    "ambiguousAllowed": 8,
+    "normalAllowed": 8,
+    "normalBlocked": 0,
+    "sameSourceNormalAllowed": 24,
+    "expiredAttackAllowed": 8
+  },
+  "productionRulesChanged": false
+}

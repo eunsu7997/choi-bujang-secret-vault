@@ -1,0 +1,3 @@
+/alerts.log
+/state/known-cve-deny.json
+/state/known-cve-deny.json.*.tmp

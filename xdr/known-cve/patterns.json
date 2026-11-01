@@ -1,0 +1,100 @@
+[
+  {
+    "name": "log4shell_remote_lookup",
+    "condition": {
+      "kind": "remote_lookup",
+      "fields": [
+        "data.useragent",
+        "data.headers",
+        "data.url",
+        "data.query",
+        "data.args",
+        "data.params"
+      ],
+      "regex": "\\$\\{jndi:(?:ldap|ldaps|rmi):\\/\\/(?:\\[[0-9a-f:.]+\\]|[a-z0-9][a-z0-9.-]*)(?::[0-9]{1,5})?(?:\\/[^\\s{}]*)?\\}",
+      "flags": "i"
+    },
+    "confidence": 0.97,
+    "evidence": "Apache의 CVE-2021-44228 설명과 MITRE T1190에 따라 요청 안의 완전한 외부 JNDI 조회 구문을 악용 형태로 판단한다.",
+    "sources": [
+      "https://logging.apache.org/security.html#CVE-2021-44228",
+      "https://attack.mitre.org/techniques/T1190/"
+    ]
+  },
+  {
+    "name": "log4shell_lookup_fragment",
+    "condition": {
+      "kind": "request_text",
+      "fields": [
+        "data.useragent",
+        "data.headers",
+        "data.url",
+        "data.query",
+        "data.args",
+        "data.params"
+      ],
+      "regex": "\\$\\{\\s*jndi\\s*:|\\bjndi\\s*:\\s*(?:ldap|ldaps|rmi)",
+      "flags": "i"
+    },
+    "confidence": 0.65,
+    "evidence": "CVE-2021-44228의 JNDI 조회 관련 조각은 완전한 외부 조회 구문보다 근거가 약하므로 로컬 정책상 알림만 남긴다.",
+    "sources": [
+      "https://logging.apache.org/security.html#CVE-2021-44228"
+    ]
+  },
+  {
+    "name": "vulnerability_scanner_trace",
+    "condition": {
+      "kind": "request_text",
+      "fields": [
+        "data.useragent",
+        "data.headers",
+        "data.url",
+        "data.query",
+        "data.args",
+        "data.params"
+      ],
+      "regex": "\\b(?:nuclei|log4j-scan)\\b",
+      "flags": "i"
+    },
+    "confidence": 0.6,
+    "evidence": "공개 Log4Shell 점검 도구의 이름은 점검 흔적일 수 있으나 승인된 점검과 구분할 수 없어 로컬 정책상 알림만 남긴다.",
+    "sources": [
+      "https://github.com/projectdiscovery/nuclei-templates/blob/main/http/cves/2021/CVE-2021-44228.yaml",
+      "https://github.com/fullhunt/log4j-scan"
+    ]
+  },
+  {
+    "name": "log4shell_cve_reference",
+    "condition": {
+      "kind": "request_text",
+      "fields": [
+        "data.useragent",
+        "data.headers",
+        "data.url",
+        "data.query",
+        "data.args",
+        "data.params"
+      ],
+      "regex": "\\bCVE-2021-44228\\b",
+      "flags": "i"
+    },
+    "confidence": 0.55,
+    "evidence": "CVE-2021-44228 이름만으로는 원격 실행 형태가 확인되지 않으므로 로컬 정책상 검토 알림만 남긴다.",
+    "sources": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+    ]
+  },
+  {
+    "name": "t1190_review",
+    "condition": {
+      "kind": "mitre_tag",
+      "technique": "T1190"
+    },
+    "confidence": 0.5,
+    "evidence": "MITRE T1190은 공개 애플리케이션 악용 기법 분류이며 태그만으로 실제 공격을 확정할 수 없어 로컬 정책상 알림만 남긴다.",
+    "sources": [
+      "https://attack.mitre.org/techniques/T1190/"
+    ]
+  }
+]

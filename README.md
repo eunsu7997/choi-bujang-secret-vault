@@ -3,6 +3,13 @@
 - 운영: https://choi-bujang-secret-vault-livid.vercel.app/
 - 저장소: https://github.com/eunsu7997/choi-bujang-secret-vault
 
+## 보너스 xdr-03 저장점 · 알려진 취약점 악용 (2026-11-01)
+
+- 제작 1~5: 경보 읽기, 근거를 붙인 패턴 목록, 외부 의존성이 없는 단독 판단, 만료·근거 경보를 가진 추가 거부 연결, 시험 결과를 [xdr/known-cve/README.md](xdr/known-cve/README.md)에 정리했습니다.
+- 재실행: 이 폴더에서 npm run xdr:run -- known-cve → node xdr/known-cve/respond.mjs --fixture. result.json은 block 8 · alert 8 · record 8이며 로컬 연결 재연에서 정상 차단 0건, 같은 주소의 정상 요청 통과와 만료 해제를 확인했습니다.
+- 검증: node --test test/known-cve-read-alerts.test.mjs test/known-cve.test.mjs. 기존 판정기 규칙·설정·경보 원본을 보존하며 원문·계정·비밀값을 알림/추가 거부 상태에 보관하지 않습니다.
+- 기존 18항목 판정 계약에는 원문 요청과 출발 IP가 없어 서버가 확인한 증거를 별도로 받는 연결 함수를 제공합니다. 운영 엔진의 증거 전달·새 이유 코드 등록·실제 배포·심판 제출은 이 로컬 저장점의 검증 범위에 포함되지 않습니다.
+
 ## 보너스 xdr-01 · 무차별 로그인 공격 탐지 (2026-11-01)
 
 - `xdr/brute-force/`에 경보 읽기, MITRE T1110 기반 패턴 목록, 외부 의존성 없는 `decide(alert)`, 만료되는 차단 규칙 연결 모듈을 추가했습니다. 원본 경보·기존 학생 판정기·12단계 화면과 제출 관측 코드는 유지합니다.
