@@ -72,20 +72,25 @@ test('ops:probe procedure records real responses, request IDs and server IDs; co
 test('submission evidence matches captured requests and never invents responses or IDs', async () => {
   const original = globalThis.fetch;
   const sent = [];
+  const attempted = [];
   globalThis.fetch = async (url, init = {}) => {
     assert.equal(typeof url, 'string');
     const id = init.headers?.['x-attack-id'];
     if (!id) return new Response('탈환 작전실', { status: 200 });
+    attempted.push(id);
     const probe = catalog.HTTP_PROBES.find(p => p.id === id);
     assert.equal(new URL(url).pathname, probe.path);
     assert.equal(init.method, probe.method);
     if (id === 'http_manifest_ok') throw new TypeError('network unavailable');
-    const status = id === 'http_notes_anon' ? 503 : probe.expect[0];
+    const status = id === 'http_root_ok' ? 503 : probe.expect[0];
     sent.push({ id, status, requestId: init.headers['x-request-id'] });
     return new Response(null, { status, headers: { 'x-vercel-id': 'test-server' } });
   };
   try {
     const results = await runAttackChecks({ step: 12, publicAppUrl: 'https://example.test/', sampleMarker: 'SAMPLE_NOTE_1' });
+    assert.deepEqual(attempted, ['http_root_ok', 'http_manifest_ok', 'http_aleph_json_ok']);
+    assert.match(results.find(r => r.attackId === 'http_root_ok').observed, /^HTTP 503/u);
+    assert.equal(results.filter(r => r.attackId.startsWith('http_') && r.observed === 'not_run').length, 11);
     for (const probe of catalog.HTTP_PROBES) {
       const observed = results.find(r => r.attackId === probe.id).observed;
       const request = sent.find(r => r.id === probe.id);
@@ -118,7 +123,7 @@ test('separate checker realm records imported probe requests through its own fet
         if (!id) return new Response('탈환 작전실');
         if (id === 'http_manifest_ok') throw new TypeError('network failed');
         const probe = catalog.HTTP_PROBES.find(p => p.id === id);
-        const status = id === 'http_notes_anon' ? 503 : probe.expect[0];
+        const status = id === 'http_root_ok' ? 503 : probe.expect[0];
         recorded.push({ id, status });
         return new Response(null, { status });
       },
@@ -130,7 +135,7 @@ test('separate checker realm records imported probe requests through its own fet
       if (sent) assert.ok(actual.startsWith(`HTTP ${sent.status} ·`), `${probe.id}: ${actual}`);
       else assert.equal(actual, 'not_run');
     }
-    assert.equal(recorded.length, 9);
+    assert.deepEqual(recorded.map(r => r.id), ['http_root_ok', 'http_aleph_json_ok']);
   } finally { globalThis.fetch = oldFetch; }
 });
 

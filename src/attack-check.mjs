@@ -435,10 +435,21 @@ async function twelfthStepChecks(config, app) {
   }
   // 요청은 이 실행 환경의 fetch를 통과시킵니다. 가져온 모듈의 기본 fetch는
   // 별도 실행 환경에서 심판의 요청 기록기를 우회할 수 있으므로 사용하지 않습니다.
+  // 제출 자기 점검은 공개 배포 확인 3건만 실행합니다. 보호 API 점검은
+  // ops:probe/작전실에서 별도로 실행하며 그 결과를 이 제출의 관측으로 옮기지 않습니다.
+  // 생략한 요청은 fetch 전에 중단하므로 report의 집계와 observed 모두 미실행입니다.
+  const submissionReads = new Map([
+    ['http_root_ok', '/'],
+    ['http_manifest_ok', '/manifest.webmanifest'],
+    ['http_aleph_json_ok', '/aleph.json'],
+  ]);
   const responses = new Map();
   const report = await runOpsProbe({ base: app, fetchImpl: async (url, init) => {
-    const response = await fetch(String(url), init);
     const attackId = init.headers['x-attack-id'];
+    if (init.method !== 'GET' || submissionReads.get(attackId) !== new URL(url).pathname) {
+      throw new Error('이 제출 자기 점검의 실행 범위 밖: not_run');
+    }
+    const response = await fetch(String(url), init);
     responses.set(attackId, { status: response.status, requestId: init.headers['x-request-id'],
       serverId: response.headers.get('x-vercel-id'), method: init.method,
       path: new URL(url).pathname, at: new Date().toISOString() });
