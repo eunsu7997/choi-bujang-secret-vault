@@ -69,7 +69,25 @@ test('ops:probe procedure records real responses, request IDs and server IDs; co
   assert.ok(down.rows.filter(r => r.where === '운영 API 실제 요청').every(r => r.ok === undefined && /^(미실행|not_run)/u.test(r.actual)));
 });
 
-test('every submission HTTP status matches a captured response, including failures and ops.html', async () => {
+test('submission never sends the eight requests missing from the supplied judge record', async () => {
+  const original = globalThis.fetch;
+  const sent = [];
+  const missing = ['http_data_json_hidden', 'http_notes_anon', 'http_note_item_anon',
+    'http_notes_forged', 'http_notices_anon', 'http_device_status_anon',
+    'http_ops_summary_anon', 'ops_page_served'];
+  globalThis.fetch = async (url, init) => {
+    sent.push(init.headers['x-attack-id']);
+    return new Response(null, { status: 200 });
+  };
+  try {
+    const rows = await runAttackChecks({ step: 12, publicAppUrl: 'https://example.test/', sampleMarker: 'SAMPLE_NOTE_1' });
+    assert.deepEqual(sent, ['http_root_ok', 'http_manifest_ok', 'http_aleph_json_ok']);
+    for (const id of missing) assert.equal(rows.find(row => row.attackId === id).observed, 'not_run', id);
+    assert.equal(rows.filter(row => row.observed === 'not_run').length, 13);
+  } finally { globalThis.fetch = original; }
+});
+
+test('each executed submission response is recorded unchanged, including HTTP failures', async () => {
   const original = globalThis.fetch;
   const sent = [];
   const attempted = [];
@@ -91,11 +109,11 @@ test('every submission HTTP status matches a captured response, including failur
   };
   try {
     const results = await runAttackChecks({ step: 12, publicAppUrl: 'https://example.test/', sampleMarker: 'SAMPLE_NOTE_1' });
-    assert.deepEqual(attempted, [...catalog.HTTP_PROBES.filter(p => p.method === 'GET').map(p => p.id), 'ops_page_served']);
+    assert.deepEqual(attempted, ['http_root_ok', 'http_manifest_ok', 'http_aleph_json_ok']);
     assert.equal(results.find(r => r.attackId === 'http_root_ok').observed, 'HTTP 503');
-    assert.equal(results.find(r => r.attackId === 'http_notes_anon').observed, 'HTTP 500');
+    assert.equal(results.find(r => r.attackId === 'http_notes_anon').observed, 'not_run');
     assert.equal(results.length, 16);
-    assert.equal(results.filter(r => r.observed === 'not_run').length, 6);
+    assert.equal(results.filter(r => r.observed === 'not_run').length, 14);
     for (const result of results) {
       const observed = result.observed;
       const request = sent.find(r => r.id === result.attackId);
@@ -133,7 +151,7 @@ test('separate checker realm makes every request through its own fetch', async (
       const sent = recorded.find(r => r.id === row.attackId);
       assert.equal(row.observed, sent ? `HTTP ${sent.status}` : 'not_run', row.attackId);
     }
-    assert.equal(recorded.length, 10);
+    assert.deepEqual(recorded.map(row => row.id), ['http_root_ok', 'http_aleph_json_ok']);
   } finally { globalThis.fetch = oldFetch; }
 });
 

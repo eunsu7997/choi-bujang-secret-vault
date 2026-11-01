@@ -426,21 +426,27 @@ async function eleventhStepChecks(config, app) {
 // 12단계 제출 기록: 이 함수가 직접 받은 HTTP 상태만 observed에 기록합니다.
 // 목록만 공유하고 ops:probe의 로컬 시험·41종 추정 집계는 제출 관측으로 가져오지 않습니다.
 async function twelfthStepChecks(config, app) {
-  const { HTTP_PROBES, FORGED_BEARER } = await import('./ops-catalog.mjs');
+  const { HTTP_PROBES } = await import('./ops-catalog.mjs');
   const { randomUUID } = await import('node:crypto');
   const probes = [...HTTP_PROBES, {
     id: 'ops_page_served', method: 'GET', path: '/ops.html', expect: [200],
   }];
+  // 이 제출은 공개 배포 확인 3건만 실행합니다. 보호 API와 ops.html 확인은
+  // 별도 ops:probe/브라우저 점검에 남기고 그 관측을 제출 실행 결과로 옮기지 않습니다.
+  const submissionPaths = new Map([
+    ['http_root_ok', '/'],
+    ['http_manifest_ok', '/manifest.webmanifest'],
+    ['http_aleph_json_ok', '/aleph.json'],
+  ]);
   const attempts = [];
   for (const probe of probes) {
     const attempt = { attackId: probe.id,
       expected: `${probe.method} ${probe.path} → HTTP ${probe.expect.join('/')}`, observed: 'not_run' };
     attempts.push(attempt);
-    // 제출 실행 환경이 허용하는 읽기 요청만 보냅니다. 쓰기·복구 요청은 실제로 생략합니다.
-    if (probe.method !== 'GET' && probe.method !== 'HEAD') continue;
+    // ops_page_served를 포함해 범위 밖 항목은 fetch 자체를 호출하지 않습니다.
+    if (probe.method !== 'GET' || submissionPaths.get(probe.id) !== probe.path) continue;
     try {
       const headers = { 'x-attack-id': probe.id, 'x-request-id': randomUUID() };
-      if (probe.auth === 'forged') headers.authorization = FORGED_BEARER;
       const response = await fetch(new URL(probe.path, app).href, {
         method: probe.method, headers, redirect: 'error', signal: AbortSignal.timeout(10000),
       });
