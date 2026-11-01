@@ -24,6 +24,8 @@ async function page() {
   let serverUser = null;
   let nextLogin = null;
   let failLogin = false;
+  // 11단계: 화면은 먼저 /api/device/status를 묻습니다. 기본은 승인된 기기입니다.
+  let deviceState = { state: 'approved', approved: true, code: 'ABCD-1234' };
   const json = (status, data) => ({ ok: status < 400, status, json: async () => data });
   const context = {
     document: { querySelector: get, createElement: tag => new Element(tag) },
@@ -36,6 +38,7 @@ async function page() {
         return json(200, { signedIn: true, userId: serverUser });
       }
       if (url === '/api/auth/logout') { serverUser = null; return json(200, { signedIn: false, revoked: true }); }
+      if (url === '/api/device/status') return json(200, deviceState);
       return new Promise(resolve => pending.push({ url, init, resolve }));
     },
     setTimeout(fn) { timers.push(fn); return timers.length; }, clearTimeout() {},
@@ -51,7 +54,7 @@ async function page() {
   };
   const reply = async (request, notes = [], status = 200) => { request.resolve({ ok: status < 400, status, json: async () => notes }); await flush(); };
   const list = () => get('#notes');
-  return { get, pending, auth, reply, flush, list, failLogin: () => { failLogin = true; } };
+  return { get, pending, auth, reply, flush, list, failLogin: () => { failLogin = true; }, setDevice: state => { deviceState = state; } };
 }
 
 test('account switch immediately clears prior memo text and ignores the prior account response', async () => {
@@ -106,28 +109,35 @@ test('login network errors clear password and re-enable the button', async () =>
   assert.match(p.get('#auth-status').textContent, /로그인에 실패/u);
 });
 
-test('11단계: unapproved device shows the approval panel without notes; approved device opens the existing screen', async () => {
+test('11단계: device status is checked first; unapproved device gets no notes request and no data', async () => {
   const p = await page();
+  p.setDevice({ state: 'pending', approved: false, code: 'ABCD-1234' });
   await p.auth('A');
-  await p.reply(p.pending.at(-1), { error: 'DEVICE_NOT_APPROVED' }, 403);
+  // 승인 전에는 메모 요청 자체를 보내지 않습니다.
+  assert.equal(p.pending.filter(item => item.url.startsWith('/api/notes')).length, 0);
   assert.equal(p.get('#device-section').hidden, false);
   assert.equal(p.get('#editor-section').hidden, true);
   assert.equal(p.list().children[0].textContent, '이 기기는 아직 승인되지 않아 자료를 표시하지 않습니다.');
-  const status = p.pending.at(-1);
-  assert.equal(status.url, '/api/device/status');
-  await p.reply(status, { state: 'pending', approved: false, code: 'ABCD-1234' });
   assert.equal(p.get('#device-code').textContent, 'ABCD-1234');
-  // 승인 요청 버튼은 요청만 보내고, 응답이 pending이면 자료를 열지 않습니다.
+  // 승인 요청 버튼은 요청만 보내고, 응답이 pending이면 메모를 요청하지 않습니다.
   const click = p.get('#device-request').fire('click');
   const request = p.pending.at(-1);
   assert.equal(request.url, '/api/device/request');
   assert.equal(request.init.method, 'POST');
   await p.reply(request, { state: 'pending', approved: false, code: 'ABCD-1234' }); await click;
+  assert.equal(p.pending.filter(item => item.url.startsWith('/api/notes')).length, 0);
   assert.equal(p.get('#device-section').hidden, false);
-  assert.equal(p.list().children[0].textContent, '이 기기는 아직 승인되지 않아 자료를 표시하지 않습니다.');
-  // 서버가 승인한 뒤 다시 확인하면 기존 화면이 열립니다.
+  // 확인 실패(서버 응답 이상)도 승인 안 됨으로 취급합니다.
+  p.setDevice(null);
   p.get('#device-recheck').fire('click'); await p.flush();
-  await p.reply(p.pending.at(-1), [{ id: 'a', title: 'A note', body: '' }]);
+  assert.equal(p.pending.filter(item => item.url.startsWith('/api/notes')).length, 0);
+  assert.equal(p.get('#editor-section').hidden, true);
+  // 서버가 승인한 뒤 ‘승인 다시 확인’ → 상태 확인 → 메모 요청 → 기존 화면
+  p.setDevice({ state: 'approved', approved: true, code: 'ABCD-1234' });
+  p.get('#device-recheck').fire('click'); await p.flush();
+  const notes = p.pending.at(-1);
+  assert.equal(notes.url, '/api/notes');
+  await p.reply(notes, [{ id: 'a', title: 'A note', body: '' }]);
   assert.equal(p.get('#device-section').hidden, true);
   assert.equal(p.get('#editor-section').hidden, false);
   assert.equal(p.list().children[0].children[0].textContent, 'A note');

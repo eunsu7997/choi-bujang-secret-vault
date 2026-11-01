@@ -11,6 +11,7 @@
   - 승인: 「승인 요청」 버튼은 대기(pending) 행만 만듭니다(서버 권한은 읽기·추가뿐, 추가 행은 트리거로 pending만 허용). 본문에 `approved`를 넣어도 무시됩니다. 승인은 계정 주인이 Supabase SQL Editor에서 `supabase/device-approve.sql`(내 이메일 + 화면의 승인 코드, 대기 중인 한 대만)로만 합니다. 취소는 같은 조건으로 `revoked`.
   - 경로: `GET /api/device/status`, `POST /api/device/request`(`vercel.json` rewrite → `api/notes.js`). 둘 다 로그인 필수(비로그인 401), 쿠키 POST는 같은 출처만.
   - 기존 결과 유지: 비로그인 401, 위조 토큰 401, 소유자 검사(남의 메모 404), 공지·관리·복원 경로는 그대로입니다. Authorization 헤더(심판·자동 점검) 경로의 기기 확인은 반 엔진·판정기(6단계 `device_registered`)가 맡고, 서버 화면 경로의 기기 승인과는 따로입니다. 기기 기록을 확인할 수 없으면(테이블 없음 등) 거부합니다.
+- 11단계 보완(심판 S11_DATA_BEFORE_APPROVAL 반영): 화면이 로그인 직후·「승인 다시 확인」·온라인 복귀 때 먼저 `GET /api/device/status`를 묻고, 서버 응답이 `approved: true`(state `approved`)일 때만 메모를 요청합니다. 미승인·확인 실패면 메모를 요청하지 않고 승인 안내만 보여 주며, 쓰기 화면도 자료를 받은 뒤에만 엽니다.
 - 운영 적용(학생이 직접): ① Supabase SQL Editor에서 `supabase/device-approvals.sql` 실행(마지막 확인 결과 `rls_forced=true`, `public_grants=0`, `server_grants=INSERT,SELECT`) ② 배포된 화면에서 로그인 → 「이 기기 승인 요청」 → 승인 코드 확인 ③ `supabase/device-approve.sql`의 이메일·코드 두 값을 SQL Editor에서만 바꿔 실행 ④ 화면에서 「승인 다시 확인」 → 기존 메모 화면이 열림. ①을 하기 전에는 브라우저 화면에서 메모가 열리지 않습니다(실패 시 닫힘).
 - 확인: `node --test --test-concurrency=1 test/*.test.mjs`(`test/step11-device-app.test.mjs`: 승인 전 403·버튼은 pending만·승인 뒤 정상·다른 기기 차단·헤더 경로 유지·저장소 오류 시 거부·manifest/서비스 워커 검사, `test/ui-security.test.mjs`: 실제 화면 코드에서 승인 전 자료 없음·승인 뒤 기존 화면). 로그인 쿠키가 필요한 운영 확인(승인 전 자료 없음, 승인한 기기의 기존 화면)은 **미실행**이며 위 운영 적용 순서로 직접 확인합니다. 서명 위조(서명 뒤 경로·본문 변경, 서명 없는 요청)는 반 엔진의 기기 서명 검증 범위로, 이 저장소에서 실측하지 않았습니다.
 

@@ -244,16 +244,37 @@
       deviceStatus.textContent = DEVICE_STATES[data?.state] ?? '승인 상태를 확인할 수 없습니다. 잠시 뒤 다시 시도하세요.';
     }
 
-    async function showDeviceGate() {
+    // 서버에 이 기기의 승인 상태를 묻습니다. 실패하면 null(승인 안 됨으로 취급)입니다.
+    async function fetchDeviceStatus() {
+      try {
+        const response = await fetch('/api/device/status', { cache: 'no-store', credentials: 'same-origin' });
+        return response.ok ? await response.json() : null;
+      } catch { return null; }
+    }
+
+    // 승인 전 화면: 자료와 쓰기 화면을 숨기고 승인 안내만 보여 줍니다.
+    async function showDeviceGate(known) {
       const gen = sessionGen;
       editorSection.hidden = true;
       deviceSection.hidden = false;
       showMessage('이 기기는 아직 승인되지 않아 자료를 표시하지 않습니다.');
-      try {
-        const response = await fetch('/api/device/status', { cache: 'no-store', credentials: 'same-origin' });
-        const data = response.ok ? await response.json() : null;
-        if (gen === sessionGen) showDeviceState(data);
-      } catch { if (gen === sessionGen) showDeviceState(null); }
+      const data = known === undefined ? await fetchDeviceStatus() : known;
+      if (gen === sessionGen) showDeviceState(data);
+    }
+
+    // 11단계: 먼저 서버의 기기 승인 상태를 확인하고, approved=true일 때만 메모를 요청합니다.
+    // 미승인·확인 실패면 메모를 요청하지 않고 승인 안내만 보여 줍니다.
+    async function openIfApproved(session, turn) {
+      const gen = sessionGen;
+      editorSection.hidden = true;
+      const data = await fetchDeviceStatus();
+      if (turn !== renderTurn || gen !== sessionGen || session !== currentSession) return;
+      if (data?.approved === true && data.state === 'approved') {
+        deviceSection.hidden = true;
+        loadNotes(session, turn);
+        return;
+      }
+      showDeviceGate(data);
     }
 
     deviceRequest.addEventListener('click', async () => {
@@ -268,9 +289,10 @@
       if (gen !== sessionGen) return;
       // 버튼은 요청만 보냅니다. 승인 여부는 서버 응답(state)과 자료 요청 결과로만 판단합니다.
       showDeviceState(data);
-      if (data?.state === 'approved') loadNotes(currentSession, renderTurn);
+      if (data?.state === 'approved' && currentSession) openIfApproved(currentSession, renderTurn);
     });
-    deviceRecheck.addEventListener('click', () => { if (currentSession) loadNotes(currentSession, renderTurn); });
+    // ‘승인 다시 확인’도 같은 순서: 승인 상태 확인 → approved일 때만 메모 요청
+    deviceRecheck.addEventListener('click', () => { if (currentSession) openIfApproved(currentSession, renderTurn); });
 
     async function loadNotes(session, turn) {
       const requestTurn = ++loadTurn;
@@ -302,7 +324,8 @@
       const turn = ++renderTurn;
       form.hidden = Boolean(session);
       signedIn.hidden = !session;
-      editorSection.hidden = !session;
+      // 쓰기 화면은 서버가 기기 승인을 확인하고 자료를 준 뒤에만 엽니다.
+      editorSection.hidden = true;
       if (!session) deviceSection.hidden = true;
       const user = session ? session.userId : null;
       if (user !== currentUser) {
@@ -316,7 +339,7 @@
       currentSession = session ?? null;
       status.textContent = session ? '로그인된 상태입니다.' : (pendingNotice || '이메일과 비밀번호로 로그인하세요.');
       if (!session) pendingNotice = '';
-      if (session) loadNotes(session, turn);
+      if (session) openIfApproved(session, turn);
       else showMessage('로그인하면 가상 메모를 볼 수 있습니다.');
     }
 
@@ -410,7 +433,7 @@
     const offlineBanner = document.querySelector('#offline-banner');
     if (typeof window !== 'undefined' && typeof navigator !== 'undefined') {
       const syncOnline = () => { offlineBanner.hidden = navigator.onLine !== false; };
-      window.addEventListener('online', () => { syncOnline(); if (currentSession) loadNotes(currentSession, renderTurn); });
+      window.addEventListener('online', () => { syncOnline(); if (currentSession) openIfApproved(currentSession, renderTurn); });
       window.addEventListener('offline', syncOnline);
       syncOnline();
       if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
