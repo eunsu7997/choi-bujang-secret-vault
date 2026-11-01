@@ -1,7 +1,27 @@
-# BYTE BACK 방어전 R5 · 9단계
+# BYTE BACK 방어전 R5 · 10단계
 
 - 운영: https://choi-bujang-secret-vault-livid.vercel.app/
 - 저장소: https://github.com/eunsu7997/choi-bujang-secret-vault
+
+## 10단계 · 백업에서 자료실을 되살립니다 (2026-11-01)
+
+### 제작 1·2 · 안전 정책 사본과 되돌리기
+- 안전 정책 = `src/decider.mjs`(판정기 규칙), `aleph.config.json`의 `allowedRoutes`, DB 접근 정책(`supabase/notes-step4-rls.sql`, `supabase/notes-step5-revoke.sql`). 사본은 `backup/policy/`에, 항목별 SHA-256과 전체 해시는 `backup/policy/manifest.json`에 있습니다(버전 `6c42a96e83f9`).
+- `npm run policy:verify`: 사본을 다시 읽어 해시를 검증하고 현재 운영 정책과 다른 항목을 보여 줍니다. 사본이 없거나 해시가 하나라도 다르면 중단합니다. `npm run policy:snapshot`은 사본이 있으면 덮어쓰지 않습니다.
+- `npm run policy:diff -- <시험폴더>`: 검증한 사본과 시험 정책의 차이(복원할 버전, 바뀐 파일·줄)만 보여 줍니다. `npm run policy:restore -- <시험폴더>`는 바뀔 항목만 보여 주고 멈추며, `--yes`를 붙여야 그 항목만 사본으로 되돌립니다. 시험 폴더의 다른 파일(다른 서비스 규칙)과 `audit.log` 이력은 보존하고 복원 한 줄을 추가합니다. 운영 정책 파일은 바꾸지 않습니다.
+- `npm run policy:drill`: 임시 시험 사본을 만들어 메모 구역에 `GET /notes`(ID 없는 전체 목록) 한 줄을 끼워 침공을 흉내 내고(목록 allow), 차이를 보여 준 뒤 확인 없이는 적용하지 않고, `--yes` 복원 뒤 목록 deny·자기 메모 ID 읽기 allow를 다시 확인합니다. B의 A 자료 요청 거부는 API 소유자 검사(`test/step4-ownership.test.mjs`, `test/step8-zones.test.mjs`)로 확인합니다.
+
+### 제작 3 · 시험 계정 B 메모 한 건 복원
+- 복원 대상: 시험 계정 B(학생 B)의 가상 메모 **`b4b4b4b4-0000-4000-8000-000000000001`** (제목 `B 시험 메모 (공개 가능한 가상 자료)`). 내용 해시 = sha256(제목 + 줄바꿈 + 본문) = `43001f020a39ae0dd87914d5282b2b0560864e38ef02af144b396cf85f7e3676`.
+- 서비스·경로: `api/notes.js`(서버 함수) · **`POST /api/restore/b4b4b4b4-0000-4000-8000-000000000001`** (`vercel.json` rewrite, `aleph.config.json`의 `restoreRoute`). 로그인 필수(비로그인 401), POST만(그 밖 405), 사본 주인(학생 B)이나 심판 토큰만 허용(그 밖 403 `RESTORE_FORBIDDEN`). 성공 응답: `{id, action(updated|reinserted|unchanged), ownerKind, ownerMatch, contentSha256}`.
+- 비공개 사본: `supabase/notes-step10-restore-point.sql`이 만드는 `public.notes_restore_point`(RLS·FORCE RLS, anon·authenticated 권한 없음, service_role 읽기만). B 메모가 검증된 원래 제목·본문일 때만 사본을 만들고 기존 사본은 덮어쓰지 않습니다. 복원 함수 `public.restore_note_from_point`는 사본 해시를 다시 계산해 확인하고, 현재 메모의 소유자(owner_kind, owner_id)가 사본과 다르면 409로 멈추며, 그 한 건만 수정 또는 다시 삽입한 뒤 ID·소유자·내용 해시를 다시 대조합니다. 다른 메모는 건드리지 않고, 모든 시도는 추가만 되는 `public.notes_restore_audit`에 남습니다(수정·삭제·비우기 금지 트리거).
+- 운영 적용(학생이 직접): Supabase SQL Editor에서 `notes-step10-restore-point.sql` 실행 → `notes-step10-check.sql`로 `restore_points=1`, `point_sha256=current_sha256`, `owner_match=true`, `point_rls·audit_rls=true`, `public_grants=0` 확인. SQL 적용 전에는 복원 경로가 502를 돌려줍니다.
+
+### 제작 4 · 복구 뒤 재시험 순서 (실행 결과는 꾸미지 않고 실행한 것만 기록)
+1. 정책: `npm run policy:verify` → 해시 일치·운영 정책과 다른 항목 0개, `npm run policy:drill` → 변조 뒤 목록 allow, 복원 뒤 목록 deny·자기 메모 allow.
+2. 자료: 학생 B로 로그인해 B 메모를 수정(또는 삭제)한 뒤 같은 화면 개발자 도구에서 `fetch('/api/restore/b4b4b4b4-0000-4000-8000-000000000001',{method:'POST'})` → 200, `contentSha256`이 위 해시와 같음. `notes-step10-check.sql`로 `point_sha256=current_sha256`, `owner_match=true`, 메모 총수 유지, `audit_rows` 증가 확인. — **미실행**(학생 B 로그인 필요)
+3. 1~9단계 정상·금지 요청 재시험: `npm run decider:test`(6·7단계), `npm run fixture:7`, `npm run detect:test`(9단계), `node --test --test-concurrency=1 test/*.test.mjs`(3~10단계 API·구역·소유자), `npm run bundle`(비로그인 401·위조 토큰·원본 API 직접 접근·보안 헤더 실제 요청). 로그인 토큰이 필요한 A/B 교차 요청(B의 A 메모 GET·PUT·DELETE 404, A 자기 메모 정상)은 **미실행**으로 두고 브라우저에서 직접 확인합니다.
+4. 복원 경로 금지 요청: 비로그인 POST 401(bundle 자동), 학생 A 토큰 POST 403(**미실행**, 가상 토큰 시험 `test/step10-restore.test.mjs`로 대조).
 
 ## 9단계 · 도플갱어를 찾고 권한을 거둡니다 (2026-11-01)
 
@@ -106,7 +126,7 @@ PM 직접 로그인 세션에서 별도로 실행한 A/B 시험은 원본 로그
 
 ## 실행과 DB 보존
 
-의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step9, Supabase identityProvider, allowedRoutes=[GET·PUT·DELETE /api/notes/:id, GET /api/notices, GET /api/notices/:id](판정기가 허용하는 경로만), originalApiUrl=원본 notes REST 경로입니다.
+의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step10, restoreRoute=/api/restore/b4b4b4b4-0000-4000-8000-000000000001, Supabase identityProvider, allowedRoutes=[GET·PUT·DELETE /api/notes/:id, GET /api/notices, GET /api/notices/:id](판정기가 허용하는 경로만), originalApiUrl=원본 notes REST 경로입니다.
 
 환경변수 이름은 SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_PUBLISHABLE_KEY입니다. 값은 코드·대화·로그에 적지 않습니다. 현재 DB에서 notes.sql/백업/소유권 SQL을 처음부터 재실행하지 않습니다. 새 환경의 최초 구축은 `docs/DB_OWNERSHIP_RUNBOOK.md`를 현재 스키마와 PM 승인에 대조해 수행합니다.
 

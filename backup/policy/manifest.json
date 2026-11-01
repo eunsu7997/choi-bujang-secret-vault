@@ -1,0 +1,11 @@
+{
+  "schema": "aleph.policy.snapshot.v1",
+  "version": "6c42a96e83f9",
+  "files": {
+    "decider.mjs": "7dc2687eacac64583cdc09ad8b882919754403c0023b5681981118f044fa53d9",
+    "allowed-routes.json": "ab558bf1b1713e9046ff2e3272392a5c8d4b5c5d921f8d5e191b284c15b66cad",
+    "notes-step4-rls.sql": "a4a09972c7a1c6eb09ccc69b5a68d5b9e07d0dc1e9946b4ae645caab5122be40",
+    "notes-step5-revoke.sql": "8be826e97d522dda21b3af25983c862b86c49aef79005c6d80cd3823e4c19a38"
+  },
+  "manifestSha256": "6c42a96e83f9111854b11ecf650b4e70610e4181a8f0956837da77825ce453be"
+}

@@ -33,21 +33,26 @@ export function zoneRoute(request) {
   let id;
   const notice = /^\/api\/notices(?:\/([^/]+))?\/?$/u.exec(path);
   const admin = /^\/api\/admin\/notices\/([^/]+)\/?$/u.exec(path);
+  const restore = /^\/api\/restore\/([^/]+)\/?$/u.exec(path);
   try {
     if (notice) { zone = 'notices'; id = notice[1] && decodeURIComponent(notice[1]); }
     else if (admin) { zone = 'admin-notices'; id = decodeURIComponent(admin[1]); }
-    else if (path === '/api/admin' || path.startsWith('/api/admin/') || path.startsWith('/api/notices')) return { zone: 'invalid' };
+    else if (restore) { zone = 'restore'; id = decodeURIComponent(restore[1]); }
+    else if (path === '/api/admin' || path.startsWith('/api/admin/') || path.startsWith('/api/notices')
+      || path.startsWith('/api/restore')) return { zone: 'invalid' };
     else if (['/api/notes', '/api/notes/'].includes(path)) {
       const tag = oneQuery(request, url, 'zone');
       if (tag.bad) return { zone: 'invalid' };
       if (tag.value === undefined) return null;
-      if (!['notices', 'admin-notices'].includes(tag.value)) return { zone: 'invalid' };
+      if (!['notices', 'admin-notices', 'restore'].includes(tag.value)) return { zone: 'invalid' };
       zone = tag.value;
     } else return null;
   } catch { return { zone: 'invalid' }; }
   const queryId = oneQuery(request, url, 'id');
   if (queryId.bad || (id !== undefined && queryId.value !== undefined && queryId.value !== id)) return { zone: 'invalid' };
   id ??= queryId.value;
+  // 10단계: 복원 경로의 ID는 메모 UUID, 공지·관리 경로의 ID는 notice- 형식입니다.
+  if (zone === 'restore') return id !== undefined && UUID.test(id) ? { zone, id: id.toLowerCase() } : { zone: 'invalid' };
   if (id !== undefined && !NOTICE_ID.test(id)) return { zone: 'invalid' };
   if (zone === 'admin-notices' && id === undefined) return { zone: 'invalid' };
   return { zone, id };

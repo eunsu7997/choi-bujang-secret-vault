@@ -368,6 +368,33 @@ async function ninthStepChecks(config, app) {
   ];
 }
 
+// 10단계: 안전 정책 사본 검증·복원 연습(로컬)과 복원 경로의 비로그인 요청(운영 실제 요청)을 기록합니다. 심판 판정 아님.
+async function tenthStepChecks(config, app) {
+  const policy = await import('../scripts/policy-backup.mjs');
+  const restorePath = typeof config.restoreRoute === 'string' && config.restoreRoute.startsWith('/api/restore/') ? config.restoreRoute : null;
+  return [
+    await observe('policy_snapshot_verified', '안전 정책 사본을 다시 읽어 해시가 맞고 현재 운영 정책과 같음', async () => {
+      const { manifest, texts } = policy.verifySnapshot();
+      const live = policy.readLivePolicy();
+      const drift = Object.keys(live).filter(name => live[name] !== texts[name]);
+      return `로컬: 사본 버전 ${manifest.version} 해시 일치, 운영 정책과 다른 항목 ${drift.length}개`;
+    }),
+    await observe('policy_drill_restored', '시험 정책에 메모 전체 목록 허용을 끼워 넣은 뒤 사본으로 복원하면 다시 deny, 자기 메모 읽기는 allow', async () => {
+      const result = await policy.drill(() => {});
+      return `로컬: 변조 뒤 목록 ${result.tampered.list} → 복원 뒤 목록 ${result.restored.list}, 자기 메모 ${result.restored.own}, 감사 이력 ${result.auditLines}줄`;
+    }),
+    await observe('restore_route_anonymous_blocked', `비로그인 POST ${restorePath ?? '(복원 경로 없음)'} 요청이 401`, async () => {
+      if (!restorePath) return '미실행 (aleph.config.json에 restoreRoute 없음)';
+      return `HTTP ${(await fetch(new URL(restorePath, app), { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(10000) })).status}`;
+    }),
+    { attackId: 'restore_b_note_after_tamper', expected: '시험 계정 B 메모를 바꾸거나 지운 뒤 복원 경로를 부르면 ID·소유자·내용 해시가 사본과 같아짐',
+      observed: '미실행 (학생 B 로그인 토큰이 필요해 자동 점검하지 않음, README의 복구 뒤 재시험 순서로 직접 확인)' },
+    { attackId: 'post_restore_regression', expected: '복구 직후 1~9단계 정상 요청은 유지되고 금지 요청은 다시 거부됨',
+      observed: '미실행 (로그인 토큰이 필요한 항목은 자동 점검하지 않음, 아래 5단계 운영 점검과 npm 시험으로 일부 대조)' },
+    ...(await fifthStepChecks(config, app)),
+  ];
+}
+
 export async function runAttackChecks(config) {
   if (config.step === 1) return firstStepChecks(config, appUrl(config));
   if (config.step === 2) return secondStepChecks(config, appUrl(config));
@@ -378,5 +405,6 @@ export async function runAttackChecks(config) {
   if (config.step === 7) return seventhStepChecks(config, appUrl(config));
   if (config.step === 8) return eighthStepChecks(config, appUrl(config));
   if (config.step === 9) return ninthStepChecks(config, appUrl(config));
+  if (config.step === 10) return tenthStepChecks(config, appUrl(config));
   throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
 }

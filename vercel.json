@@ -17,6 +17,10 @@
       "destination": "/api/notes?zone=admin-notices&id=:id"
     },
     {
+      "source": "/api/restore/:id",
+      "destination": "/api/notes?zone=restore&id=:id"
+    },
+    {
       "source": "/api/notes/:id",
       "destination": "/api/notes?id=:id"
     },

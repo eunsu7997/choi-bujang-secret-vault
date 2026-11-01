@@ -7,6 +7,7 @@ import { createFields, putFields, publicNote, noteRoute } from '../src/notes-con
 import { ACCESS_COOKIE, readCookies, sameOrigin } from '../src/session-cookie.mjs';
 import { authAction, authClientsFromEnv, createAuthHandler } from '../src/auth-handler.mjs';
 import { NOTICES, instructorIdsFromEnv, isInstructor, resourceId, zoneRoute } from '../src/zones.mjs';
+import { supabaseRestorer } from '../src/restore.mjs';
 
 const appConfig = createRequire(import.meta.url)('../aleph.config.json');
 const MAX_NOTES = 50;
@@ -102,6 +103,30 @@ function zoneDenied(response, status, reason, resource) {
   return response.status(status).json({ error: reason });
 }
 
+// 10단계 제작 3: POST /api/restore/:id — 비공개 사본에서 메모 한 건만 복원합니다.
+// 사본 주인(학생 B)이나 심판만 허용하고, ID·소유자·내용 해시 대조와 감사 기록은 DB 함수가 합니다.
+async function handleRestore(route, method, owner, getRestorer, response) {
+  if (method !== 'POST') {
+    response.setHeader('Allow', 'POST');
+    return response.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
+  }
+  let restorer = null;
+  try { restorer = getRestorer(); } catch { restorer = null; }
+  if (!restorer) return response.status(500).json({ error: 'RESTORE_NOT_CONFIGURED' });
+  try {
+    const result = await restorer.restore(route.id, owner);
+    if (result?.status === 'missing') return response.status(404).json({ error: 'RESTORE_POINT_NOT_FOUND' });
+    if (result?.status === 'forbidden') return zoneDenied(response, 403, 'RESTORE_FORBIDDEN', resourceId('restore', route.id));
+    if (result?.status === 'conflict') return zoneDenied(response, 409, 'RESTORE_OWNER_MISMATCH', resourceId('restore', route.id));
+    if (result?.status !== 'restored') return response.status(502).json({ error: 'RESTORE_FAILED' });
+    return response.status(200).json({ id: result.id, action: result.action, ownerKind: result.owner_kind,
+      ownerMatch: result.owner_match === true, contentSha256: result.content_sha256 });
+  } catch (error) {
+    console.error('restore_failed', typeof error?.code === 'string' ? error.code : 'unknown');
+    return response.status(502).json({ error: 'RESTORE_FAILED' });
+  }
+}
+
 // 반 공지: 로그인한 학생·심판은 읽기만 합니다. 쓰기는 누구에게나 거부합니다.
 // 강사 공지 수정은 /api/admin/notices/:id 관리 경로에서 서버에 저장된 강사 목록으로만 허용합니다.
 function handleZone(route, method, owner, instructorIds, response) {
@@ -126,7 +151,7 @@ function handleZone(route, method, owner, instructorIds, response) {
   return response.status(501).json({ error: 'NOTICE_STORE_NOT_CONNECTED' });
 }
 
-export function createNotesHandler({ getVerifier, getStore, writesEnabled = false, getInstructorIds = () => new Set() }) {
+export function createNotesHandler({ getVerifier, getStore, writesEnabled = false, getInstructorIds = () => new Set(), getRestorer = () => null }) {
   if (typeof getVerifier !== 'function' || typeof getStore !== 'function') throw new TypeError('invalid_notes_handler');
   return async function handler(request, response) {
     response.setHeader('Cache-Control', 'no-store');
@@ -158,6 +183,7 @@ export function createNotesHandler({ getVerifier, getStore, writesEnabled = fals
 
     // 8단계: 공지·관리 경로는 메모와 다른 구역으로 처리합니다. 화면 메뉴나 본문의 role은 보지 않습니다.
     const zone = zoneRoute(request);
+    if (zone?.zone === 'restore') return handleRestore(zone, method, owner, getRestorer, response);
     if (zone) {
       let instructorIds = new Set();
       try { instructorIds = getInstructorIds() ?? new Set(); } catch { instructorIds = new Set(); }
@@ -229,6 +255,10 @@ const notesHandler = createNotesHandler({
   // 심판도 자기 메모를 만들어야 "타인 메모 접근 차단" 시험이 성립하므로 쓰기를 엽니다.
   writesEnabled: true,
   getInstructorIds: () => instructorIdsFromEnv(),
+  getRestorer: () => {
+    const client = supabaseFromEnv();
+    return client && supabaseRestorer(client);
+  },
 });
 
 // 5단계 가점: 화면 로그인(/api/auth/login·session·logout)도 이 서버 함수가 처리합니다.
