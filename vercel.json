@@ -5,6 +5,18 @@
   "outputDirectory": "public",
   "rewrites": [
     {
+      "source": "/api/notices",
+      "destination": "/api/notes?zone=notices"
+    },
+    {
+      "source": "/api/notices/:id",
+      "destination": "/api/notes?zone=notices&id=:id"
+    },
+    {
+      "source": "/api/admin/notices/:id",
+      "destination": "/api/notes?zone=admin-notices&id=:id"
+    },
+    {
       "source": "/api/notes/:id",
       "destination": "/api/notes?id=:id"
     },

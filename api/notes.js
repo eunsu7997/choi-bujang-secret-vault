@@ -6,6 +6,7 @@ import { createLoginVerifier } from '../src/verify-login.mjs';
 import { createFields, putFields, publicNote, noteRoute } from '../src/notes-contract.mjs';
 import { ACCESS_COOKIE, readCookies, sameOrigin } from '../src/session-cookie.mjs';
 import { authAction, authClientsFromEnv, createAuthHandler } from '../src/auth-handler.mjs';
+import { NOTICES, instructorIdsFromEnv, isInstructor, resourceId, zoneRoute } from '../src/zones.mjs';
 
 const appConfig = createRequire(import.meta.url)('../aleph.config.json');
 const MAX_NOTES = 50;
@@ -95,7 +96,37 @@ function ownerOf(principal) {
 // 남의 메모와 없는 메모를 구분할 수 없도록 같은 응답을 씁니다.
 const notFound = (response) => response.status(404).json({ error: 'NOTE_NOT_FOUND' });
 
-export function createNotesHandler({ getVerifier, getStore, writesEnabled = false }) {
+// 8단계 제작 3: 구역 거부는 짧은 이유 코드와 자원 ID만 남깁니다(토큰·사용자 번호·본문 제외).
+function zoneDenied(response, status, reason, resource) {
+  console.warn('zone_denied', reason, resource);
+  return response.status(status).json({ error: reason });
+}
+
+// 반 공지: 로그인한 학생·심판은 읽기만 합니다. 쓰기는 누구에게나 거부합니다.
+// 강사 공지 수정은 /api/admin/notices/:id 관리 경로에서 서버에 저장된 강사 목록으로만 허용합니다.
+function handleZone(route, method, owner, instructorIds, response) {
+  if (route.zone === 'invalid') return response.status(400).json({ error: 'INVALID_RESOURCE' });
+  if (route.zone === 'notices') {
+    if (method !== 'GET') {
+      response.setHeader('Allow', 'GET');
+      return zoneDenied(response, 405, 'NOTICE_READ_ONLY', resourceId('notices', route.id));
+    }
+    if (route.id === undefined) return response.status(200).json(NOTICES.map(({ id, title, body }) => ({ id, title, body })));
+    const notice = NOTICES.find(item => item.id === route.id);
+    return notice ? response.status(200).json({ id: notice.id, title: notice.title, body: notice.body })
+      : response.status(404).json({ error: 'NOTICE_NOT_FOUND' });
+  }
+  // admin-notices
+  if (!isInstructor(owner, instructorIds)) return zoneDenied(response, 403, 'INSTRUCTOR_ONLY', resourceId('admin-notices', route.id));
+  if (method !== 'PUT') {
+    response.setHeader('Allow', 'PUT');
+    return response.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
+  }
+  // 공지는 아직 코드에 고정된 가상 공지라 저장소가 연결되지 않았습니다. 강사 확인까지만 하고 변경은 하지 않습니다.
+  return response.status(501).json({ error: 'NOTICE_STORE_NOT_CONNECTED' });
+}
+
+export function createNotesHandler({ getVerifier, getStore, writesEnabled = false, getInstructorIds = () => new Set() }) {
   if (typeof getVerifier !== 'function' || typeof getStore !== 'function') throw new TypeError('invalid_notes_handler');
   return async function handler(request, response) {
     response.setHeader('Cache-Control', 'no-store');
@@ -123,6 +154,14 @@ export function createNotesHandler({ getVerifier, getStore, writesEnabled = fals
     // 쿠키로 인증한 변경 요청은 같은 출처에서 온 것만 받습니다.
     if (cookieToken && method !== 'GET' && !sameOrigin(request)) {
       return response.status(403).json({ error: 'CROSS_ORIGIN_REJECTED' });
+    }
+
+    // 8단계: 공지·관리 경로는 메모와 다른 구역으로 처리합니다. 화면 메뉴나 본문의 role은 보지 않습니다.
+    const zone = zoneRoute(request);
+    if (zone) {
+      let instructorIds = new Set();
+      try { instructorIds = getInstructorIds() ?? new Set(); } catch { instructorIds = new Set(); }
+      return handleZone(zone, method, owner, instructorIds, response);
     }
 
     // Explicit modes only: production enables students while judge writes remain gated.
@@ -189,6 +228,7 @@ const notesHandler = createNotesHandler({
   // 4단계: 학생·심판 모두 자기 소유 메모만 읽고 쓰며, 격리는 (owner_kind, owner_id)로 유지합니다.
   // 심판도 자기 메모를 만들어야 "타인 메모 접근 차단" 시험이 성립하므로 쓰기를 엽니다.
   writesEnabled: true,
+  getInstructorIds: () => instructorIdsFromEnv(),
 });
 
 // 5단계 가점: 화면 로그인(/api/auth/login·session·logout)도 이 서버 함수가 처리합니다.

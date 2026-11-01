@@ -1,7 +1,17 @@
-# BYTE BACK 방어전 R5 · 7단계
+# BYTE BACK 방어전 R5 · 8단계
 
 - 운영: https://choi-bujang-secret-vault-livid.vercel.app/
 - 저장소: https://github.com/eunsu7997/choi-bujang-secret-vault
+
+## 8단계 · 자료마다 갈 수 있는 구역을 나눕니다 (2026-11-01)
+
+- 제작 1(자원 ID): 메모는 기존 UUID(`notes/<uuid>`), 반 공지는 `notice-`로 시작하는 별도 ID(`notices/notice-class-guide`)로 구별합니다(`src/zones.mjs`). 기존 메모 자료·주소(`/api/notes`, `/api/notes/:id`)와 화면은 그대로입니다. 반 공지는 공개 가능한 가상 공지 1건이 코드에 고정돼 있습니다.
+- 제작 2(판정기 규칙 `resource_zone`): 서비스와 정확한 경로 모양으로 나눕니다. 메모는 `GET·PUT·DELETE /notes/:id`만 허용하고 ID 없는 `GET /notes`(전체 목록)·`POST /notes`는 거부, 반 공지는 `GET /notices`, `GET /notices/:id`만 허용하고 쓰기(POST·PUT·PATCH·DELETE)는 누구에게나 `notice_read_only`로 거부, 강사 자료(instructor·materials 등)는 모두 `instructor_zone_denied`, 알 수 없는 경로·route와 path 불일치·쿼리가 붙은 요청·`:id` 자리의 기능 이름(export·all·list 등)은 `route_not_allowed`입니다. 메모 ID 형식(UUID 여부)은 판정기에서 좁히지 않고, 메모 주인 비교는 서버 API가 합니다. 6단계 기기 규칙을 먼저, 7단계 추가 확인 규칙을 구역 통과 뒤에 그대로 적용합니다.
+- `aleph.config.json` allowedRoutes에는 판정기가 허용하는 경로만 메서드와 함께 적었습니다: `GET /api/notes/:id`, `PUT /api/notes/:id`, `DELETE /api/notes/:id`, `GET /api/notices`, `GET /api/notices/:id`. 화면이 쓰는 내 메모 목록 `GET /api/notes`와 로그인 경로는 서버 함수에 그대로 있지만 판정기 허용 목록에는 넣지 않았습니다.
+- 제작 3(API 재확인): `api/notes.js`가 검증된 토큰의 사용자로 다시 대조합니다. 메모는 기존 (owner_kind, owner_id) 소유자 검사로 남의 메모가 404, 반 공지는 로그인한 학생·심판이 읽기만 하고 쓰기는 405 `NOTICE_READ_ONLY`, 강사 공지 수정은 관리 경로 `PUT /api/admin/notices/:id`에서 서버 환경변수 `INSTRUCTOR_USER_IDS`(쉼표로 구분한 강사 사용자 UUID, 비우면 강사 없음)에 있는 학생 로그인 사용자만 통과하고 그 밖은 403 `INSTRUCTOR_ONLY`입니다. 요청 본문·화면 메뉴의 role은 보지 않습니다. 공지 저장소가 아직 없어 강사 확인을 통과해도 변경은 하지 않고 501을 돌려줍니다. 거부 시 로그에는 이유 코드와 자원 ID만 남깁니다(`zone_denied`).
+- 경로 연결: 서버 함수 목록을 늘리지 않기 위해 `vercel.json` rewrite로 `/api/notices`, `/api/notices/:id`, `/api/admin/notices/:id`를 `api/notes.js`에 연결합니다(내부 표시 `?zone=`). 기능을 쿼리로 고르는 공개 경로는 만들지 않았고, 내부 표시로 직접 들어와도 같은 권한 검사를 거칩니다.
+- 확인 순서: ① `npm ci` ② `npm run decider:test` → 통과 4줄 ③ `node --test --test-concurrency=1 test/*.test.mjs` (`test/step8-zones.test.mjs`: 판정기 구역 허용·거부, UUID가 아닌 메모 ID 허용, 공지 쓰기 405, 학생의 강사 공지 수정 403(본문 role 무시), 다른 사람 메모 404) ④ 커밋 후 `npm run bundle`.
+- 판정기 결과는 로컬 가상 요청 연습이며 심판 판정이 아닙니다. 새 이유 코드(`route_not_allowed`, `notice_read_only`, `instructor_zone_denied`)가 운영 등록부에 없으면 엔진은 그 요청을 허용하지 않습니다(거부 쪽으로 처리). 로그인 토큰이 필요한 운영 API 시험은 미실행입니다.
 
 ## 7단계 · 평소와 다른 접속은 다시 확인합니다 (2026-11-01)
 
@@ -88,7 +98,7 @@ PM 직접 로그인 세션에서 별도로 실행한 A/B 시험은 원본 로그
 
 ## 실행과 DB 보존
 
-의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step7, Supabase identityProvider, allowedRoutes=[/api/notes, /api/notes/:id, /api/auth/login, /api/auth/session, /api/auth/logout], originalApiUrl=원본 notes REST 경로입니다.
+의존성 설치: `npm ci`. 로컬 가상 화면: `npm run build -- --local`. 실제 Vercel 빌드는 저장소·커밋·URL 정보로 `/aleph.json`을 생성합니다. 설정은 step8, Supabase identityProvider, allowedRoutes=[GET·PUT·DELETE /api/notes/:id, GET /api/notices, GET /api/notices/:id](판정기가 허용하는 경로만), originalApiUrl=원본 notes REST 경로입니다.
 
 환경변수 이름은 SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_PUBLISHABLE_KEY입니다. 값은 코드·대화·로그에 적지 않습니다. 현재 DB에서 notes.sql/백업/소유권 SQL을 처음부터 재실행하지 않습니다. 새 환경의 최초 구축은 `docs/DB_OWNERSHIP_RUNBOOK.md`를 현재 스키마와 PM 승인에 대조해 수행합니다.
 

@@ -32,7 +32,7 @@ test('config names the query-free original data API and keeps allowed routes', a
   assert.equal(url.search, '');
   assert.equal(url.origin, new URL(config.identityProvider.issuer).origin);
   assert.equal(url.pathname, '/rest/v1/notes');
-  assert.deepEqual(config.allowedRoutes, ['/api/notes', '/api/notes/:id', '/api/auth/login', '/api/auth/session', '/api/auth/logout']);
+  assert.deepEqual(config.allowedRoutes, ['GET /api/notes/:id','PUT /api/notes/:id','DELETE /api/notes/:id','GET /api/notices','GET /api/notices/:id']);
 });
 
 test('self-check implements step 5 without printing keys', async () => {

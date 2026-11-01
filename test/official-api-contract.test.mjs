@@ -36,6 +36,6 @@ test('malformed paths and conflicting rewrite IDs cannot fall back to collection
 });
 test('canonical item routes are included in Vercel rewrite and allowlist',async()=>{
  const read=async p=>JSON.parse(await readFile(new URL(p,import.meta.url),'utf8'));
- assert.deepEqual((await read('../vercel.json')).rewrites,[{source:'/api/notes/:id',destination:'/api/notes?id=:id'},{source:'/api/auth/:action',destination:'/api/notes?auth=:action'}]);
- assert.deepEqual((await read('../aleph.config.json')).allowedRoutes,['/api/notes','/api/notes/:id','/api/auth/login','/api/auth/session','/api/auth/logout']);
+ assert.deepEqual((await read('../vercel.json')).rewrites,[{source:'/api/notices',destination:'/api/notes?zone=notices'},{source:'/api/notices/:id',destination:'/api/notes?zone=notices&id=:id'},{source:'/api/admin/notices/:id',destination:'/api/notes?zone=admin-notices&id=:id'},{source:'/api/notes/:id',destination:'/api/notes?id=:id'},{source:'/api/auth/:action',destination:'/api/notes?auth=:action'}]);
+ assert.deepEqual((await read('../aleph.config.json')).allowedRoutes,['GET /api/notes/:id','PUT /api/notes/:id','DELETE /api/notes/:id','GET /api/notices','GET /api/notices/:id']);
 });

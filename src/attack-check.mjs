@@ -86,12 +86,14 @@ async function secondStepChecks(config, app) {
   ]);
 }
 
+// 8단계부터 allowedRoutes는 "GET /api/notes/:id"처럼 메서드가 붙습니다. 첫 경로의 자료 API 기본 경로를 씁니다.
 function notesRoute(config) {
-  const route = Array.isArray(config.allowedRoutes) ? config.allowedRoutes[0] : null;
-  if (typeof route !== 'string' || !/^\/api\/[a-z0-9-]+$/u.test(route)) {
+  const first = Array.isArray(config.allowedRoutes) ? config.allowedRoutes[0] : null;
+  const path = typeof first === 'string' ? first.replace(/^(GET|POST|PUT|PATCH|DELETE) /u, '').replace(/\/:id$/u, '') : null;
+  if (typeof path !== 'string' || !/^\/api\/[a-z0-9-]+$/u.test(path)) {
     throw new Error('aleph.config.json의 allowedRoutes에 자료 API 경로를 넣어 주세요.');
   }
-  return route;
+  return path;
 }
 
 // 매번 임시 키로 만든 위조 토큰입니다. 실제 비밀값이 아니며 결과에 기록하지 않습니다.
@@ -315,6 +317,33 @@ async function seventhStepChecks(config, app) {
   ];
 }
 
+// 8단계: 판정기 resource_zone 규칙(로컬 가상 요청)과 운영 API의 공지 구역(비로그인 실제 요청)을 기록합니다. 심판 판정 아님.
+async function eighthStepChecks(config, app) {
+  const { decide } = await import('./decider.mjs');
+  const { fixtureRequests } = await import('../scripts/fixture-7.mjs');
+  const { normal } = fixtureRequests();
+  const run = (attackId, expected, service, method, path, route) => observe(attackId, expected, async () => {
+    const result = await decide({ ...normal, requestId: crypto.randomUUID(), service, method, path, route });
+    return `로컬 가상 요청: ${result.decision} · ${result.reasonCode} · ${result.ruleIds.join(',')}`;
+  });
+  return [
+    await run('zone_own_note_read_allowed', '메모 ID 하나를 고르는 GET /notes/:id는 allow(주인 비교는 서버 API)', 'notes', 'GET', '/notes/demo', 'GET /notes/:id'),
+    await run('zone_note_list_denied', 'ID 없는 메모 전체 목록 GET /notes는 deny', 'notes', 'GET', '/notes', 'GET /notes'),
+    await run('zone_notice_read_allowed', '반 공지 읽기 GET /notices/:id는 allow', 'notices', 'GET', '/notices/notice-class-guide', 'GET /notices/:id'),
+    await run('zone_notice_write_denied', '반 공지 쓰기 PUT /notices/:id는 누구에게나 deny', 'notices', 'PUT', '/notices/notice-class-guide', 'PUT /notices/:id'),
+    await run('zone_instructor_material_denied', '강사 자료 GET /instructor/:id는 판정기에서 deny', 'instructor', 'GET', '/instructor/m1', 'GET /instructor/:id'),
+    await run('zone_function_path_denied', ':id 자리에 기능 이름(export)을 넣은 요청은 deny', 'notes', 'GET', '/notes/export', 'GET /notes/:id'),
+    await observe('api_notice_anonymous_blocked', '비로그인 GET /api/notices 요청이 401', async () =>
+      `HTTP ${(await fetch(new URL('/api/notices', app), { redirect: 'error', signal: AbortSignal.timeout(10000) })).status}`),
+    await observe('api_admin_notice_anonymous_blocked', '비로그인 PUT /api/admin/notices/:id 요청이 401', async () =>
+      `HTTP ${(await fetch(new URL('/api/admin/notices/notice-class-guide', app), { method: 'PUT', redirect: 'error',
+        signal: AbortSignal.timeout(10000), headers: { 'content-type': 'application/json' }, body: '{"title":"x","body":"x"}' })).status}`),
+    { attackId: 'api_student_notice_write_denied', expected: '학생 시험 계정의 PUT /api/notices/:id는 405, PUT /api/admin/notices/:id는 403 INSTRUCTOR_ONLY',
+      observed: '미실행 (로그인 토큰이 필요해 자동 점검하지 않음, test/step8-zones.test.mjs 가상 토큰 시험으로 대조)' },
+    ...(await fifthStepChecks(config, app)),
+  ];
+}
+
 export async function runAttackChecks(config) {
   if (config.step === 1) return firstStepChecks(config, appUrl(config));
   if (config.step === 2) return secondStepChecks(config, appUrl(config));
@@ -323,5 +352,6 @@ export async function runAttackChecks(config) {
   if (config.step === 5) return fifthStepChecks(config, appUrl(config));
   if (config.step === 6) return sixthStepChecks(config, appUrl(config));
   if (config.step === 7) return seventhStepChecks(config, appUrl(config));
+  if (config.step === 8) return eighthStepChecks(config, appUrl(config));
   throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
 }
