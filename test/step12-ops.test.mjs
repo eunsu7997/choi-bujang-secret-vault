@@ -69,74 +69,95 @@ test('ops:probe procedure records real responses, request IDs and server IDs; co
   assert.ok(down.rows.filter(r => r.where === '운영 API 실제 요청').every(r => r.ok === undefined && /^(미실행|not_run)/u.test(r.actual)));
 });
 
-test('submission evidence matches captured requests and never invents responses or IDs', async () => {
+test('every submission HTTP status matches a captured response, including failures and ops.html', async () => {
   const original = globalThis.fetch;
   const sent = [];
   const attempted = [];
   globalThis.fetch = async (url, init = {}) => {
     assert.equal(typeof url, 'string');
     const id = init.headers?.['x-attack-id'];
-    if (!id) return new Response('탈환 작전실', { status: 200 });
+    assert.ok(id, 'every request must identify its submission row');
     attempted.push(id);
-    const probe = catalog.HTTP_PROBES.find(p => p.id === id);
+    const probe = catalog.HTTP_PROBES.find(p => p.id === id)
+      ?? { id: 'ops_page_served', method: 'GET', path: '/ops.html', expect: [200] };
     assert.equal(new URL(url).pathname, probe.path);
     assert.equal(init.method, probe.method);
+    assert.match(init.headers['x-request-id'], /^[0-9a-f-]{36}$/u);
+    assert.equal(init.headers.authorization, probe.auth === 'forged' ? catalog.FORGED_BEARER : undefined);
     if (id === 'http_manifest_ok') throw new TypeError('network unavailable');
-    const status = id === 'http_root_ok' ? 503 : probe.expect[0];
+    const status = id === 'http_root_ok' ? 503 : id === 'http_notes_anon' ? 500 : probe.expect[0];
     sent.push({ id, status, requestId: init.headers['x-request-id'] });
-    return new Response(null, { status, headers: { 'x-vercel-id': 'test-server' } });
+    return { status, text() { throw new Error('submission must not read a note body'); } };
   };
   try {
     const results = await runAttackChecks({ step: 12, publicAppUrl: 'https://example.test/', sampleMarker: 'SAMPLE_NOTE_1' });
-    assert.deepEqual(attempted, ['http_root_ok', 'http_manifest_ok', 'http_aleph_json_ok']);
-    assert.match(results.find(r => r.attackId === 'http_root_ok').observed, /^HTTP 503/u);
-    assert.equal(results.filter(r => r.attackId.startsWith('http_') && r.observed === 'not_run').length, 11);
-    for (const probe of catalog.HTTP_PROBES) {
-      const observed = results.find(r => r.attackId === probe.id).observed;
-      const request = sent.find(r => r.id === probe.id);
+    assert.deepEqual(attempted, [...catalog.HTTP_PROBES.filter(p => p.method === 'GET').map(p => p.id), 'ops_page_served']);
+    assert.equal(results.find(r => r.attackId === 'http_root_ok').observed, 'HTTP 503');
+    assert.equal(results.find(r => r.attackId === 'http_notes_anon').observed, 'HTTP 500');
+    assert.equal(results.length, 16);
+    assert.equal(results.filter(r => r.observed === 'not_run').length, 6);
+    for (const result of results) {
+      const observed = result.observed;
+      const request = sent.find(r => r.id === result.attackId);
+      assert.deepEqual(Object.keys(result).sort(), ['attackId', 'expected', 'observed']);
       if (!request) assert.equal(observed, 'not_run');
-      else {
-        assert.ok(observed.startsWith(`HTTP ${request.status} ·`));
-        assert.ok(observed.includes(`attackId ${request.id}`));
-        assert.ok(observed.includes(request.requestId));
-        assert.ok(observed.includes(`${probe.method} ${probe.path}`));
-        assert.ok(observed.length <= 300);
-      }
+      else assert.equal(observed, `HTTP ${request.status}`);
     }
   } finally { globalThis.fetch = original; }
 });
 
-test('separate checker realm records imported probe requests through its own fetch', async () => {
+test('separate checker realm makes every request through its own fetch', async () => {
   const source = await read('src/attack-check.mjs');
   const body = source.slice(source.indexOf('async function twelfthStepChecks'), source.indexOf('export async function runAttackChecks'))
-    .replace("import('./ops-probe-core.mjs')", 'loadCore()');
+    .replace("import('./ops-catalog.mjs')", 'loadCatalog()')
+    .replace("import('node:crypto')", 'loadCrypto()');
   const recorded = [];
   const oldFetch = globalThis.fetch;
   globalThis.fetch = async () => { throw new Error('imported module must not use host fetch'); };
   try {
     const check = vm.runInNewContext(`(${body})`, {
-      loadCore: async () => ({ runOpsProbe }), URL, AbortSignal,
-      observe: async (attackId, expected, run) => ({ attackId, expected, observed: await run() }),
+      loadCatalog: async () => catalog, loadCrypto: () => import('node:crypto'), URL, AbortSignal,
       fetch: async (url, init) => {
         assert.equal(typeof url, 'string');
         const id = init.headers?.['x-attack-id'];
-        if (!id) return new Response('탈환 작전실');
+        assert.ok(id);
         if (id === 'http_manifest_ok') throw new TypeError('network failed');
-        const probe = catalog.HTTP_PROBES.find(p => p.id === id);
+        const probe = catalog.HTTP_PROBES.find(p => p.id === id) ?? { expect: [200] };
         const status = id === 'http_root_ok' ? 503 : probe.expect[0];
         recorded.push({ id, status });
         return new Response(null, { status });
       },
     });
     const rows = await check({}, new URL('https://example.test/'));
-    for (const probe of catalog.HTTP_PROBES) {
-      const actual = rows.find(r => r.attackId === probe.id).observed;
-      const sent = recorded.find(r => r.id === probe.id);
-      if (sent) assert.ok(actual.startsWith(`HTTP ${sent.status} ·`), `${probe.id}: ${actual}`);
-      else assert.equal(actual, 'not_run');
+    for (const row of rows) {
+      const sent = recorded.find(r => r.id === row.attackId);
+      assert.equal(row.observed, sent ? `HTTP ${sent.status}` : 'not_run', row.attackId);
     }
-    assert.deepEqual(recorded.map(r => r.id), ['http_root_ok', 'http_aleph_json_ok']);
+    assert.equal(recorded.length, 10);
   } finally { globalThis.fetch = oldFetch; }
+});
+
+test('with no HTTP responses every submission observation is not_run, with no inferred passes', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => { throw new TypeError('offline'); };
+  try {
+    const rows = await runAttackChecks({ step: 12, publicAppUrl: 'https://example.test/', sampleMarker: 'SAMPLE_NOTE_1' });
+    assert.equal(rows.length, 16);
+    for (const row of rows) assert.equal(row.observed, 'not_run', row.attackId);
+  } finally { globalThis.fetch = original; }
+});
+
+test('when only three public responses are available all other observations stay not_run', async () => {
+  const original = globalThis.fetch;
+  const available = ['http_root_ok', 'http_manifest_ok', 'http_aleph_json_ok'];
+  globalThis.fetch = async (url, init) => {
+    if (!available.includes(init.headers['x-attack-id'])) throw new TypeError('no response in this environment');
+    return new Response(null, { status: 200 });
+  };
+  try {
+    const rows = await runAttackChecks({ step: 12, publicAppUrl: 'https://example.test/', sampleMarker: 'SAMPLE_NOTE_1' });
+    for (const row of rows) assert.equal(row.observed, available.includes(row.attackId) ? 'HTTP 200' : 'not_run', row.attackId);
+  } finally { globalThis.fetch = original; }
 });
 
 test('ops summary API: login required, approved device for browser, header path works, no memo bodies', async () => {
@@ -263,7 +284,8 @@ test('step 12 checker import path stays inside src/ and computes no paths at imp
   const source = await read('src/attack-check.mjs');
   const twelfth = source.slice(source.indexOf('async function twelfthStepChecks'), source.indexOf('export async function runAttackChecks'));
   assert.doesNotMatch(twelfth, /\.\.\/scripts\//u);
-  assert.match(twelfth, /import\('\.\/ops-probe-core\.mjs'\)/u);
+  assert.match(twelfth, /import\('\.\/ops-catalog\.mjs'\)/u);
+  assert.doesNotMatch(twelfth, /ops-probe-core|runOpsProbe|report\.tally/u);
   for (const file of ['src/ops-probe-core.mjs', 'src/ops-local.mjs', 'src/ops-catalog.mjs', 'src/decider.mjs', 'src/detect.mjs']) {
     const code = await read(file);
     assert.doesNotMatch(code, /from '\.\.\//u, `${file} imports outside src/`);

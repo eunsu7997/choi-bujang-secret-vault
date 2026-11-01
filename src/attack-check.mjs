@@ -423,57 +423,40 @@ async function eleventhStepChecks(config, app) {
   ];
 }
 
-// 12단계: 탈환 작전실과 같은 시험(scripts/ops-probe.mjs)을 실제로 실행한 결과입니다. 연결 실패·미실행은 통과로 세지 않습니다.
-// 12단계 보완: 점검 본체는 src/ops-probe-core.mjs(같은 폴더)에서 불러옵니다. 불러오기에 실패해도 묶음 전체를 멈추지 않고 미실행으로 남깁니다.
+// 12단계 제출 기록: 이 함수가 직접 받은 HTTP 상태만 observed에 기록합니다.
+// 목록만 공유하고 ops:probe의 로컬 시험·41종 추정 집계는 제출 관측으로 가져오지 않습니다.
 async function twelfthStepChecks(config, app) {
-  let runOpsProbe;
-  try {
-    ({ runOpsProbe } = await import('./ops-probe-core.mjs'));
-  } catch (error) {
-    return [{ attackId: 'ops_probe_import', expected: '탈환 작전실 점검 본체(src/ops-probe-core.mjs)를 불러와 실제 요청을 보냄',
-      observed: `미실행 (불러오기 실패: ${String(error?.code ?? error?.name ?? 'unknown').slice(0, 60)})` }];
-  }
-  // 요청은 이 실행 환경의 fetch를 통과시킵니다. 가져온 모듈의 기본 fetch는
-  // 별도 실행 환경에서 심판의 요청 기록기를 우회할 수 있으므로 사용하지 않습니다.
-  // 제출 자기 점검은 공개 배포 확인 3건만 실행합니다. 보호 API 점검은
-  // ops:probe/작전실에서 별도로 실행하며 그 결과를 이 제출의 관측으로 옮기지 않습니다.
-  // 생략한 요청은 fetch 전에 중단하므로 report의 집계와 observed 모두 미실행입니다.
-  const submissionReads = new Map([
-    ['http_root_ok', '/'],
-    ['http_manifest_ok', '/manifest.webmanifest'],
-    ['http_aleph_json_ok', '/aleph.json'],
-  ]);
-  const responses = new Map();
-  const report = await runOpsProbe({ base: app, fetchImpl: async (url, init) => {
-    const attackId = init.headers['x-attack-id'];
-    if (init.method !== 'GET' || submissionReads.get(attackId) !== new URL(url).pathname) {
-      throw new Error('이 제출 자기 점검의 실행 범위 밖: not_run');
+  const { HTTP_PROBES, FORGED_BEARER } = await import('./ops-catalog.mjs');
+  const { randomUUID } = await import('node:crypto');
+  const probes = [...HTTP_PROBES, {
+    id: 'ops_page_served', method: 'GET', path: '/ops.html', expect: [200],
+  }];
+  const attempts = [];
+  for (const probe of probes) {
+    const attempt = { attackId: probe.id,
+      expected: `${probe.method} ${probe.path} → HTTP ${probe.expect.join('/')}`, observed: 'not_run' };
+    attempts.push(attempt);
+    // 제출 실행 환경이 허용하는 읽기 요청만 보냅니다. 쓰기·복구 요청은 실제로 생략합니다.
+    if (probe.method !== 'GET' && probe.method !== 'HEAD') continue;
+    try {
+      const headers = { 'x-attack-id': probe.id, 'x-request-id': randomUUID() };
+      if (probe.auth === 'forged') headers.authorization = FORGED_BEARER;
+      const response = await fetch(new URL(probe.path, app).href, {
+        method: probe.method, headers, redirect: 'error', signal: AbortSignal.timeout(10000),
+      });
+      // 401·404·500도 실제로 받은 응답입니다. 기대 상태로 대체하거나 성공으로 바꾸지 않습니다.
+      // 응답 본문, 별도 실행의 시각·ID·추정 성공 수는 제출 결과에 섞지 않습니다.
+      if (Number.isInteger(response.status) && response.status >= 100 && response.status <= 599) {
+        attempt.observed = `HTTP ${response.status}`;
+      }
+    } catch {
+      // 응답을 확인하지 못한 요청은 ops.html을 포함해 모두 정확히 not_run입니다.
     }
-    const response = await fetch(String(url), init);
-    responses.set(attackId, { status: response.status, requestId: init.headers['x-request-id'],
-      serverId: response.headers.get('x-vercel-id'), method: init.method,
-      path: new URL(url).pathname, at: new Date().toISOString() });
-    return response;
-  } });
-  const http = report.rows.filter(row => row.where === '운영 API 실제 요청').map(row => ({
-    attackId: row.id, expected: `${row.stage}단계 ${row.kind} · ${row.label} → ${row.expected}`,
-    observed: !responses.has(row.id) ? 'not_run' : (() => {
-      const sent = responses.get(row.id);
-      return `HTTP ${sent.status} · ${sent.method} ${sent.path} · attackId ${row.id} · 요청ID ${sent.requestId}${sent.serverId ? ` · 서버ID ${sent.serverId}` : ''} · ${sent.at}`;
-    })(),
-  }));
-  const local = report.rows.filter(row => row.where !== '운영 API 실제 요청');
+  }
   return [
-    ...http,
-    await observe('ops_page_served', '/ops.html 탈환 작전실이 열리고 메모 본문 표시·innerHTML을 쓰지 않음', async () => {
-      const response = await fetch(new URL('/ops.html', app).href, { redirect: 'error', signal: AbortSignal.timeout(10000) });
-      const html = response.ok ? await response.text() : '';
-      return `HTTP ${response.status}, 작전실 ${html.includes('탈환 작전실') ? '있음' : '없음'}, innerHTML ${/innerHTML/u.test(html) ? '사용' : '없음'}`;
-    }),
-    { attackId: 'ops_local_student_code', expected: '학생 판정기·탐지기 고정 가상 요청이 모두 기대대로',
-      observed: `로컬 실행 ${local.length}건: 기대대로 ${local.filter(row => row.ok === true).length} · 기대와 다름 ${local.filter(row => row.ok === false).length} · 미실행 ${local.filter(row => typeof row.ok !== 'boolean').length}` },
-    { attackId: 'ops_41_status', expected: '공식 41종을 실측 통과·부분 실측·실측 실패·미실행으로 구분(통과 꾸밈 없음, 공식 판정 아님)',
-      observed: Object.entries(report.tally).map(([label, value]) => `${label} ${value}`).join(' · ') },
+    ...attempts,
+    { attackId: 'ops_local_student_code', expected: '학생 코드 가상 시험은 별도 로컬 명령으로 검증하며 이 제출에서는 실행하지 않음', observed: 'not_run' },
+    { attackId: 'ops_41_status', expected: '공식 41종 결과는 심판이 확인하며 로컬 시험으로 통과 수를 계산하지 않음', observed: 'not_run' },
   ];
 }
 
