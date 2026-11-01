@@ -11,6 +11,8 @@
     "detect:test": "node scripts/detect-test.mjs",
     "fixture:7": "node scripts/fixture-7.mjs",
     "xdr:run": "node scripts/xdr-run.mjs",
+    "xdr:all": "node scripts/xdr-all.mjs --replay",
+    "test:xdr": "node --test test/xdr-suite.test.mjs",
     "policy:snapshot": "node scripts/policy-backup.mjs snapshot",
     "policy:verify": "node scripts/policy-backup.mjs verify",
     "policy:diff": "node scripts/policy-backup.mjs diff",

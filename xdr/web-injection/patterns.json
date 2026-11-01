@@ -1,0 +1,36 @@
+[
+  {
+    "name": "sql_injection",
+    "condition": "요청 인자의 UNION SELECT·논리식·이어 붙인 SQL 또는 센서가 보고한 SQL 삽입 구문. 같은 출발지에서 3회 이상 반복하고 수준 10 이상일 때 차단 후보.",
+    "evidence": "MITRE T1190의 공개 웹 앱 악용 범주이며, SQL 명령에 입력을 섞는 구체 형태는 CWE-89에 근거.",
+    "source": "https://attack.mitre.org/techniques/T1190/",
+    "detailSource": "https://cwe.mitre.org/data/definitions/89.html",
+    "minCount": 3,
+    "minLevel": 10
+  },
+  {
+    "name": "script_injection",
+    "condition": "요청 인자에 스크립트 태그·이벤트 처리기 또는 센서가 확인한 스크립트 삽입 표식. 반복·수준 조건은 SQL과 동일.",
+    "evidence": "웹 출력에 실행 가능한 입력이 들어가는 스크립트 주입은 CWE-79에 근거. 태그 없는 수업 단어는 해당하지 않음.",
+    "source": "https://cwe.mitre.org/data/definitions/79.html"
+  },
+  {
+    "name": "path_traversal",
+    "condition": "../ 또는 ..\\가 두 단계 이상이거나 센서가 경로 이탈·여러 단계 거슬러 올라가기를 보고. 반복·수준 조건은 SQL과 동일.",
+    "evidence": "제한된 디렉터리 밖을 가리키는 상대 경로 조작은 CWE-22에 근거.",
+    "source": "https://cwe.mitre.org/data/definitions/22.html"
+  },
+  {
+    "name": "command_injection",
+    "condition": "명령 구분자 뒤 실행 명령이 있거나 센서가 명령 구분자 삽입을 보고. 반복·수준 조건은 SQL과 동일.",
+    "evidence": "외부 입력의 구분자로 OS 명령 구조를 바꾸는 형태는 CWE-78에 근거. 구분 문자 하나로는 차단하지 않음.",
+    "source": "https://cwe.mitre.org/data/definitions/78.html"
+  },
+  {
+    "name": "incomplete_injection",
+    "condition": "단발성 따옴표·주입 조각·삽입 의심 또는 센서의 T1190 분류만 있고 명확한 반복 구문은 없으면 알림만 기록.",
+    "evidence": "MITRE T1190 분류와 CWE-89의 특수문자 입력은 문맥 확인이 필요하며 단독 태그·부호는 악용 성공 근거가 아님.",
+    "source": "https://attack.mitre.org/techniques/T1190/",
+    "detailSource": "https://cwe.mitre.org/data/definitions/89.html"
+  }
+]

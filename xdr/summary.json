@@ -1,0 +1,97 @@
+{
+  "schema": "aleph.xdr.summary.v1",
+  "mode": "isolated-fixture-replay",
+  "modules": [
+    {
+      "moduleKey": "brute-force",
+      "counts": {
+        "block": 10,
+        "alert": 9,
+        "record": 9
+      },
+      "replay": {
+        "attacksDenied": 10,
+        "otherEventsAllowed": 18,
+        "recordEventsBlocked": 0,
+        "expiryReleased": 28
+      }
+    },
+    {
+      "moduleKey": "web-injection",
+      "counts": {
+        "block": 8,
+        "alert": 9,
+        "record": 9
+      },
+      "replay": {
+        "attacksDenied": 8,
+        "otherEventsAllowed": 18,
+        "recordEventsBlocked": 0,
+        "expiryReleased": 26
+      }
+    },
+    {
+      "moduleKey": "known-cve",
+      "counts": {
+        "block": 8,
+        "alert": 8,
+        "record": 8
+      },
+      "replay": {
+        "attacksDenied": 8,
+        "otherEventsAllowed": 16,
+        "recordEventsBlocked": 0,
+        "expiryReleased": 24
+      }
+    },
+    {
+      "moduleKey": "persistence",
+      "counts": {
+        "block": 8,
+        "alert": 8,
+        "record": 8
+      },
+      "replay": {
+        "attacksDenied": 8,
+        "otherEventsAllowed": 16,
+        "recordEventsBlocked": 0,
+        "expiryReleased": 24
+      }
+    },
+    {
+      "moduleKey": "privilege",
+      "counts": {
+        "block": 9,
+        "alert": 6,
+        "record": 11
+      },
+      "replay": {
+        "attacksDenied": 9,
+        "otherEventsAllowed": 17,
+        "recordEventsBlocked": 0,
+        "expiryReleased": 26
+      }
+    },
+    {
+      "moduleKey": "exfiltration",
+      "counts": {
+        "block": 10,
+        "alert": 10,
+        "record": 10
+      },
+      "replay": {
+        "attacksDenied": 10,
+        "otherEventsAllowed": 20,
+        "recordEventsBlocked": 0,
+        "expiryReleased": 30
+      }
+    }
+  ],
+  "totals": {
+    "block": 53,
+    "alert": 50,
+    "record": 55
+  },
+  "productionConnected": false,
+  "officialJudgment": false
+}
