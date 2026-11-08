@@ -1,0 +1,10 @@
+{
+  "schema": "alekov.student-appearance.v1",
+  "appName": "Halo",
+  "palette": {
+    "accent": "#1f4fb5",
+    "background": "#f4f6fa",
+    "surface": "#ffffff"
+  },
+  "dashboardPreset": "student-first"
+}

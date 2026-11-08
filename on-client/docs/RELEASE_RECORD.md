@@ -97,3 +97,13 @@ git checkout e8c65b687d862a1b80fe720aea176e899b31a22a
 - OSV 실제 조회: 허용 목록 설정 전에는 not_configured·not_checked.
 - 실행 도구 옵션 중 `-Port`는 이번 재현에서 확인, `-Background`·`-Demo`·`-NoNativeHost`는 미확인.
 - macOS·Linux용 실행 절차 없음.
+
+## 8. 마지막 총공세 변경 (22단계 이후)
+
+| 항목 | 내용 | 확인 방법 | 결과 |
+|---|---|---|---|
+| Halo 요약 대시보드 | `student/extension.mjs`의 `createStudentView({ api, onChange })`에 상태를 두고 `renderStatus` 앞에 요약 대시보드 추가(16단계 함수는 수정 없음) | 가짜 DOM 시험: 정상·주의·확인 불가·조회 실패·schema 불일치·기록 5회 상한·자동 조회 없음 | 통과 |
+| 이전 단계 회귀 | 13~20단계 학생 함수 | 단계별 가짜 DOM 시험 재실행 | 13~20 모두 통과 |
+| 실제 응답 연결 | 로컬 서버 `--demo` 실행 후 `/api/pc/status` 실제 응답을 대시보드에 넣어 봄 | 시험 PC(리눅스 VM): CPU·메모리·디스크 정상, 방화벽·이벤트 확인 불가(지원하지 않는 환경), 네트워크 주의 | 형식 연결 확인. **Windows 실제 화면은 학생 PC에서 직접 확인 필요** |
+| 꾸밈 | `student/appearance.json` 추가 | 제공 검증기 `ok:true`, 서버 `/student/appearance.json` → `state: "applied"`, 대비 보정 없음 | 통과 |
+| 포장(`npm run package-app`) | 이번 과정 범위 아님 | — | 실행하지 않음 |
