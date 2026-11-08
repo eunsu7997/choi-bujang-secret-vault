@@ -790,7 +790,7 @@ export function renderVulnerabilities({ status, mode, data, error } = {}) {
 const PC_METRICS = [['cpu', 'CPU'], ['memory', '메모리'], ['disk', '디스크'], ['firewall', '방화벽'], ['events', 'Windows 이벤트'], ['network', '네트워크']];
 const PC_LEVELS = { ok: { mark: '●', label: '정상' }, warn: { mark: '▲', label: '주의' }, unknown: { mark: '?', label: '확인 불가' } };
 const PC_REASONS = { permission_denied: '권한 없음', query_failed: '조회 실패', invalid_response: '응답 형식 오류', unsupported: '지원하지 않는 환경', timeout: '시간 초과' };
-const PC_HISTORY_MAX = 5;
+const PC_HISTORY_MAX = 10;
 const PC_SCHEMA = 'aleph.on.pc-status.v1';
 const finiteNumber = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 const gib = (bytes) => `${(bytes / 1024 ** 3).toFixed(1)}GB`;
@@ -861,7 +861,11 @@ function summarizePc(data) {
   const metrics = data && typeof data === 'object' && data.metrics && typeof data.metrics === 'object' ? data.metrics : {};
   const items = PC_METRICS.map(([key, label]) => ({ key, label, ...judgeMetric(key, metrics[key]) }));
   const count = (level) => items.filter((item) => item.level === level).length;
-  return { items, ok: count('ok'), warn: count('warn'), unknown: count('unknown'), measuredAt: data?.measuredAt, schemaOk: data?.schema === PC_SCHEMA };
+  const cpu = metrics.cpu?.state === 'ok' ? finiteNumber(metrics.cpu.usagePercent) : null;
+  const usedBytes = metrics.memory?.state === 'ok' ? finiteNumber(metrics.memory.usedBytes) : null;
+  const totalBytes = metrics.memory?.state === 'ok' ? finiteNumber(metrics.memory.totalBytes) : null;
+  const memory = usedBytes !== null && totalBytes ? percent(usedBytes, totalBytes) : null;
+  return { items, ok: count('ok'), warn: count('warn'), unknown: count('unknown'), measuredAt: data?.measuredAt, schemaOk: data?.schema === PC_SCHEMA, cpu, memory };
 }
 
 function pcCard(item) {
@@ -871,13 +875,54 @@ function pcCard(item) {
   return card;
 }
 
+// 변화 그래프: 확인할 때마다 쌓인 CPU·메모리 사용률을 오래된 것부터 막대(<meter>)로 보여 줍니다.
+// 제공 화면의 보안 정책상 인라인 style을 쓰지 않고, 브라우저 기본 막대와 숫자 글자를 함께 둡니다.
+function usageCell(value, name) {
+  const cell = node('td');
+  if (value === null) { cell.append(node('span', '? 확인 불가', { 'data-tone': 'unknown' })); return cell; }
+  const bar = node('meter', null, { min: '0', max: '100', low: '70', high: name === 'CPU' ? '85' : '90', optimum: '0', value: String(value), 'aria-label': `${name} 사용률 ${value}%` });
+  cell.append(bar, node('span', ` ${value}%`));
+  return cell;
+}
+
+function trendSection(history) {
+  const points = history.filter((h) => h.ok).slice().reverse();
+  const section = node('section', null, { 'data-field': 'trend' });
+  section.append(node('h4', '변화 그래프 · CPU·메모리 사용률'));
+  if (points.length < 2) {
+    section.append(node('p', `확인을 2번 이상 하면 변화가 보입니다 (지금 ${points.length}번).`, { 'data-state': 'empty' }));
+    return section;
+  }
+  const table = node('table');
+  table.append(node('caption', `최근 ${points.length}번 확인 · 위가 오래된 값, 아래가 최신 값`));
+  const head = node('tr');
+  for (const label of ['측정 시각', 'CPU', '메모리']) head.append(node('th', label, { scope: 'col' }));
+  table.append(head);
+  for (const point of points) {
+    const row = node('tr');
+    row.append(node('th', pcTime(point.at), { scope: 'row' }), usageCell(point.summary.cpu, 'CPU'), usageCell(point.summary.memory, '메모리'));
+    table.append(row);
+  }
+  section.append(table);
+  const first = points[0].summary; const last = points[points.length - 1].summary;
+  const diff = (a, b) => (a === null || b === null ? '비교 불가' : `${b - a >= 0 ? '+' : ''}${Math.round((b - a) * 10) / 10}%p`);
+  section.append(node('p', `처음 대비 변화: CPU ${diff(first.cpu, last.cpu)} · 메모리 ${diff(first.memory, last.memory)}`, { 'data-field': 'trend-diff' }));
+  return section;
+}
+
 function renderPcDashboard(state, recheck) {
   const root = node('section', null, { class: 'student-dashboard', 'data-agent': 'Halo', 'data-status': state.status });
   root.append(node('h3', 'Halo 요약 대시보드 · 내 PC'));
-  const button = node('button', state.status === 'loading' ? '확인 중…' : '내 PC 다시 확인', { type: 'button' });
+  const button = node('button', state.status === 'loading' ? '확인 중…' : '내 PC 다시 확인', { type: 'button', 'aria-describedby': 'halo-pc-help' });
+  root.setAttribute('aria-busy', state.status === 'loading' ? 'true' : 'false');
   if (state.status === 'loading') button.disabled = true;
   button.addEventListener('click', recheck);
-  root.append(button, node('p', '버튼을 누를 때만 조회합니다. 자동으로 다시 확인하거나 PC 설정을 바꾸지 않습니다.', { class: 'student-mode' }));
+  // 다시 그려도 키보드 사용자가 버튼 위치를 잃지 않도록, 버튼으로 조회했다면 새 버튼에 초점을 돌려줍니다.
+  if (state.keepFocus && state.status !== 'loading') {
+    state.keepFocus = false;
+    queueMicrotask(() => { if (typeof button.focus === 'function') button.focus(); });
+  }
+  root.append(button, node('p', '버튼을 누를 때만 조회합니다. 자동으로 다시 확인하거나 PC 설정을 바꾸지 않습니다.', { class: 'student-mode', id: 'halo-pc-help' }));
 
   if (state.status === 'idle') {
     root.append(node('p', "아직 확인하지 않았습니다. '내 PC 다시 확인'을 누르세요.", { role: 'status', 'data-state': 'idle' }));
@@ -897,7 +942,7 @@ function renderPcDashboard(state, recheck) {
       : summary.unknown
         ? `? 확인 불가 ${summary.unknown}개 · 정상 ${summary.ok}개 (확인 불가 항목은 정상으로 보지 않습니다)`
         : `● 6개 항목 모두 정상`;
-    root.append(node('p', headline, { 'data-field': 'verdict', 'data-tone': verdict }));
+    root.append(node('p', headline, { 'data-field': 'verdict', 'data-tone': verdict, role: 'status', 'aria-live': 'polite' }));
     root.append(node('p', `측정 시각: ${pcTime(summary.measuredAt)}${state.status === 'error' ? ' · 이전 결과입니다' : ''}`, { 'data-field': 'measuredAt' }));
     if (!summary.schemaOk) root.append(node('p', '응답 형식(schema)이 예상과 달라 값을 확인 불가로 다뤘습니다.', { 'data-tone': 'unknown' }));
     const cards = node('ul', null, { class: 'student-dashboard-cards' });
@@ -916,9 +961,11 @@ function renderPcDashboard(state, recheck) {
     root.append(todo);
   }
 
+  root.append(trendSection(state.history));
+
   if (state.history.length) {
     const history = node('details', null, { 'data-field': 'history' });
-    history.append(node('summary', `최근 확인 기록 (${state.history.length}회, 이 화면을 연 동안만 보관)`));
+    history.append(node('summary', `최근 확인 기록 (${state.history.length}회, 최대 10회 · 이 화면을 연 동안만 보관)`));
     const list = node('ul');
     for (const h of state.history) {
       list.append(node('li', h.ok ? `${pcTime(h.at)} · 정상 ${h.summary.ok} · 주의 ${h.summary.warn} · 확인 불가 ${h.summary.unknown}` : `${pcTime(h.at)} · 조회 실패 (${h.code})`));
@@ -932,7 +979,7 @@ function renderPcDashboard(state, recheck) {
   const rules = node('ul');
   for (const rule of ['CPU 사용률 85% 이상이면 주의', '메모리 사용 90% 이상이면 주의', '디스크 여유 10% 미만이면 주의',
     '방화벽 프로필 중 하나라도 꺼져 있으면 주의', 'Windows 시스템 이벤트에 오류가 1건 이상이면 주의', 'IPv4 주소가 없으면 주의',
-    '값이 없거나 형식이 다르면 정상이 아니라 확인 불가', '출처: 로컬 서버의 /api/pc/status 읽기 전용 조회. 보안 판정·조치·AI 설명이 아닙니다.']) rules.append(node('li', rule));
+    '값이 없거나 형식이 다르면 정상이 아니라 확인 불가', '변화 그래프와 기록은 이 화면을 연 동안 최근 10번만 보관(저장하지 않음)', '출처: 로컬 서버의 /api/pc/status 읽기 전용 조회. 보안 판정·조치·AI 설명이 아닙니다.']) rules.append(node('li', rule));
   detail.append(rules);
   root.append(detail);
   return root;
@@ -940,11 +987,12 @@ function renderPcDashboard(state, recheck) {
 
 export function createStudentView({ api, onChange } = {}) {
   // 대시보드 상태는 이 화면 안(클로저)에서만 보관합니다. 저장소·localStorage에 쓰지 않습니다.
-  const pc = { status: 'idle', summary: null, error: null, history: [] };
+  const pc = { status: 'idle', summary: null, error: null, history: [], keepFocus: false };
   const refresh = () => { if (typeof onChange === 'function') onChange(); };
   async function recheck() {
     if (pc.status === 'loading' || typeof api?.get !== 'function') return;
     pc.status = 'loading';
+    pc.keepFocus = true;
     refresh();
     let result;
     try { result = await api.get('/api/pc/status'); } catch { result = { ok: false, error: { code: 'NETWORK_ERROR', message: '조회 중 오류가 났습니다' } }; }

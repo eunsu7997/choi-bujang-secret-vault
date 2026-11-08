@@ -11,7 +11,7 @@
 - 실행: `on-client` 폴더에서 `powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1` → `http://127.0.0.1:5189/`.
 - 실행 절차·구성도(Mermaid와 글)·제공/학생 구분·확인/미확인·장애별 복구: [`on-client/docs/STUDENT_RUNBOOK.md`](on-client/docs/STUDENT_RUNBOOK.md)
 - 최종 재현 기록·13~21단계 결과표·데이터 보존 계획·버전(검증 중인 버전)·미해결 사항: [`on-client/docs/RELEASE_RECORD.md`](on-client/docs/RELEASE_RECORD.md)
-- 마지막 총공세: '기기·세션·알림·도움정보' 칸 맨 위에 **Halo 요약 대시보드**(내 PC 다시 확인 → CPU·메모리·디스크·방화벽·Windows 이벤트·네트워크를 ● 정상 / ▲ 주의 / ? 확인 불가로 요약, 다음 할 일·최근 기록)와 꾸밈 파일 `on-client/student/appearance.json`(앱 이름 Halo)을 추가했습니다. 설명은 STUDENT_RUNBOOK 10장, 확인 결과는 RELEASE_RECORD 8장.
+- 마지막 총공세: '기기·세션·알림·도움정보' 칸 맨 위에 **Halo 요약 대시보드**(내 PC 다시 확인 → CPU·메모리·디스크·방화벽·Windows 이벤트·네트워크를 ● 정상 / ▲ 주의 / ? 확인 불가로 요약, 다음 할 일·최근 기록)·CPU·메모리 변화 그래프와 꾸밈 파일 `on-client/student/appearance.json`(앱 이름 Halo)을 추가했습니다. 설명은 STUDENT_RUNBOOK 10장, 확인 결과는 RELEASE_RECORD 8장.
 - 위 1~12단계 메모 자료실(Vercel) 설명과 Halo 실행은 서로 독립입니다.
 
 ## 보너스 XDR 6종 · 전체 로컬 완성 (2026-11-01)

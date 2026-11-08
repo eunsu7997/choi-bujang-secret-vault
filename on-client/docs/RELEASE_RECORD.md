@@ -105,5 +105,8 @@ git checkout e8c65b687d862a1b80fe720aea176e899b31a22a
 | Halo 요약 대시보드 | `student/extension.mjs`의 `createStudentView({ api, onChange })`에 상태를 두고 `renderStatus` 앞에 요약 대시보드 추가(16단계 함수는 수정 없음) | 가짜 DOM 시험: 정상·주의·확인 불가·조회 실패·schema 불일치·기록 5회 상한·자동 조회 없음 | 통과 |
 | 이전 단계 회귀 | 13~20단계 학생 함수 | 단계별 가짜 DOM 시험 재실행 | 13~20 모두 통과 |
 | 실제 응답 연결 | 로컬 서버 `--demo` 실행 후 `/api/pc/status` 실제 응답을 대시보드에 넣어 봄 | 시험 PC(리눅스 VM): CPU·메모리·디스크 정상, 방화벽·이벤트 확인 불가(지원하지 않는 환경), 네트워크 주의 | 형식 연결 확인. **Windows 실제 화면은 학생 PC에서 직접 확인 필요** |
+| 변화 그래프·접근성 | 확인 기록 10회의 CPU·메모리 사용률을 `<meter>` 막대로 표시, 처음 대비 변화, 버튼 초점 복귀, `role=status` 알림 | 가짜 DOM 시험: 10회 상한·막대 20개·값/이름 속성·1회일 때 안내·메모리 확인 불가 회차 처리 | 통과 |
+| Windows 실제 확인 | 학생 PC에서 `-Port 5190`으로 실행 후 '내 PC 다시 확인' | CPU 56.7%·메모리 67.4%·디스크 여유 37%·방화벽 3개 프로필 켜짐·네트워크 IPv4 3개 → 정상, 시스템 이벤트 오류 1건 → ▲ 주의 | 판정 기준대로 동작 |
+| 제공 파일 무결성 | `.on-starter-manifest.json`의 75개 해시와 대조 | 다른 파일은 `student/extension.mjs`(학생 파일) 하나뿐 | 제공 코드 미수정 |
 | 꾸밈 | `student/appearance.json` 추가 | 제공 검증기 `ok:true`, 서버 `/student/appearance.json` → `state: "applied"`, 대비 보정 없음 | 통과 |
 | 포장(`npm run package-app`) | 이번 과정 범위 아님 | — | 실행하지 않음 |
