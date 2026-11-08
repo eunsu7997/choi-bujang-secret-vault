@@ -11,3 +11,6 @@ public/vendor/
 public/ops-catalog.js
 xdr/alerts.log
 xdr/state/
+
+# 13단계: 케셰브 시작 틀의 비밀 없는 설정 예시는 저장소에 둡니다.
+!on-client/.env.example
