@@ -10,6 +10,7 @@
 - 지원 환경: Windows PowerShell, Node.js 22~24(수업 기준 24.19.0, 학생 PC 실제 v24.20.0). 외부 npm 의존성 없음.
 - 실행: `on-client` 폴더에서 `powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1` → `http://127.0.0.1:5189/`.
 - 실행 절차·구성도(Mermaid와 글)·제공/학생 구분·확인/미확인·장애별 복구: [`on-client/docs/STUDENT_RUNBOOK.md`](on-client/docs/STUDENT_RUNBOOK.md)
+- 최종 재현 기록·13~21단계 결과표·데이터 보존 계획·버전(검증 중인 버전)·미해결 사항: [`on-client/docs/RELEASE_RECORD.md`](on-client/docs/RELEASE_RECORD.md)
 - 위 1~12단계 메모 자료실(Vercel) 설명과 Halo 실행은 서로 독립입니다.
 
 ## 보너스 XDR 6종 · 전체 로컬 완성 (2026-11-01)

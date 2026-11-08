@@ -76,7 +76,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1
 
 - 종료: 실행한 PowerShell 창에서 `Ctrl+C`. 브라우저 주소가 더 이상 열리지 않으면 종료된 것입니다.
 - 재실행: 같은 `on-client` 폴더에서 4-2의 명령을 다시 실행합니다. 실행·종료는 학생 파일을 바꾸지 않습니다.
-- 실행 도구 옵션(제공 문서 `docs/CONNECTION_TROUBLESHOOT.md` 3장 기준): `-Port 5190`(포트 충돌), `-Background`, `-Demo`, `-NoNativeHost`, `-WaitSeconds 30`. 이 옵션들은 학생이 직접 실행해 보지 않았습니다(미확인).
+- 실행 도구 옵션(제공 문서 `docs/CONNECTION_TROUBLESHOOT.md` 3장 기준): `-Port 5190`(포트 충돌), `-Background`, `-Demo`, `-NoNativeHost`, `-WaitSeconds 30`. `-Port 5190`은 22단계 재현에서 5189가 사용 중일 때 실제로 써서 확인했고([RELEASE_RECORD.md](RELEASE_RECORD.md) 3장), 나머지는 실행해 보지 않았습니다(미확인).
 
 ### 4-4. 화면 확인 순서
 
@@ -151,7 +151,9 @@ flowchart LR
 | 실제 AI 사건 설명 응답 | 미확인 | 유료 요청을 반복하지 않음 |
 | 실제 조치 집행·효과 관측 | 미확인(경로 없음) | 현재 기록의 supportedActions가 비어 조치 준비 버튼이 나오지 않는 것이 정상 |
 | OSV 실제 조회 결과 | 미확인 | 허용 목록이 비어 있으면 not_configured·not_checked가 정상 |
-| `-Port`·`-Background`·`-Demo` 옵션 | 미확인 | 직접 실행하지 않음 |
+| `-Port 5190` 옵션 | 확인 | 22단계 재현에서 포트 충돌 시 사용 |
+| `-Background`·`-Demo`·`-NoNativeHost` 옵션 | 미확인 | 직접 실행하지 않음 |
+| 새 폴더 재현(같은 커밋) | 확인 | [RELEASE_RECORD.md](RELEASE_RECORD.md) — 재현 절차·관찰 결과·데이터 보존 계획·버전 |
 | macOS·Linux | 미지원·미확인 | 실행 도구가 PowerShell 기준 |
 
 ## 8. 장애 상황별 확인·복구 순서
