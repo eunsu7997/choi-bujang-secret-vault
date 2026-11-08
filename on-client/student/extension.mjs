@@ -806,7 +806,11 @@ function pcTime(at) {
 function judgeMetric(key, metric) {
   if (!metric || metric.state !== 'ok') {
     const reason = typeof metric?.reason === 'string' && Object.hasOwn(PC_REASONS, metric.reason) ? PC_REASONS[metric.reason] : '값 없음';
-    return { level: 'unknown', value: `확인 불가 (${reason})`, next: `${key === 'firewall' || key === 'events' ? '관리자 권한·Windows 환경인지 ' : ''}확인한 뒤 다시 확인을 누르세요.` };
+    // 권한이 부족해도 권한·보안 설정을 바꾸게 안내하지 않습니다. 읽지 못한 값은 그대로 확인 불가로 둡니다.
+    const next = metric?.reason === 'permission_denied' ? '일반 권한으로는 읽을 수 없는 항목입니다. 관리자 권한으로 실행하거나 보안 설정을 바꾸지 말고 확인 불가로 둡니다.'
+      : metric?.reason === 'unsupported' ? '이 환경(Windows가 아님)에서는 읽을 수 없는 항목입니다.'
+        : "잠시 뒤 '내 PC 다시 확인'을 직접 누르세요. 계속되면 도움정보를 담당자에게 보내세요.";
+    return { level: 'unknown', value: `확인 불가 (${reason})`, next };
   }
   if (key === 'cpu') {
     const usage = finiteNumber(metric.usagePercent);
@@ -842,9 +846,10 @@ function judgeMetric(key, metric) {
   if (key === 'events') {
     const errors = finiteNumber(metric.errorCount); const warnings = finiteNumber(metric.warningCount);
     if (errors === null || warnings === null) return { level: 'unknown', value: '건수 확인 불가' };
-    const value = `오류 ${errors}건 · 경고 ${warnings}건${metric.truncated ? ' (표본 상한 도달, 실제는 더 많을 수 있음)' : ''}`;
+    const period = typeof metric.since === 'string' && Number.isFinite(Date.parse(metric.since)) ? ` · ${pcTime(metric.since)} 이후` : '';
+    const value = `System·Application 오류 ${errors}건 · 경고 ${warnings}건${period}${metric.truncated ? ' (표본 상한 도달, 실제는 더 많을 수 있음)' : ''}`;
     return errors > 0
-      ? { level: 'warn', value, next: '이벤트 뷰어 > Windows 로그 > 시스템에서 오류 내용을 확인하세요.' }
+      ? { level: 'warn', value, next: '이벤트 뷰어 > Windows 로그 > System·Application에서 오류 내용을 확인하세요. 침해·공격 탐지 결과는 아닙니다.' }
       : { level: 'ok', value };
   }
   if (key === 'network') {
@@ -865,7 +870,7 @@ function summarizePc(data) {
   const usedBytes = metrics.memory?.state === 'ok' ? finiteNumber(metrics.memory.usedBytes) : null;
   const totalBytes = metrics.memory?.state === 'ok' ? finiteNumber(metrics.memory.totalBytes) : null;
   const memory = usedBytes !== null && totalBytes ? percent(usedBytes, totalBytes) : null;
-  return { items, ok: count('ok'), warn: count('warn'), unknown: count('unknown'), measuredAt: data?.measuredAt, schemaOk: data?.schema === PC_SCHEMA, cpu, memory };
+  return { items, ok: count('ok'), warn: count('warn'), unknown: count('unknown'), measuredAt: data?.measuredAt, schemaOk: data?.schema === PC_SCHEMA, localPc: data?.source === 'local-pc', cpu, memory };
 }
 
 function pcCard(item) {
@@ -910,7 +915,20 @@ function trendSection(history) {
   return section;
 }
 
-function renderPcDashboard(state, recheck) {
+// 회사 보안 서버(SDP) 연결 상태는 PC 조회 결과와 섞지 않고 한 줄로 따로 보여 줍니다.
+function sdpLine(input) {
+  const resources = [input?.devices, input?.sessions].filter(Boolean);
+  const notConnected = resources.some((r) => r.status === 'error' && r.error?.code === 'ENGINE_NOT_CONNECTED') || input?.mode === 'disconnected';
+  let text = 'SDP(회사 보안 서버): 확인 불가';
+  let tone = 'unknown';
+  if (notConnected) text = 'SDP(회사 보안 서버): SDP 미연결 · 아래 내 PC 값과는 별개입니다';
+  else if (input?.mode === 'demo') text = 'SDP(회사 보안 서버): 예제(demo) 자료 · 실제 연결 아님';
+  else if (resources.length && resources.every((r) => r.status === 'ok' && r.mode === 'connected')) { text = 'SDP(회사 보안 서버): 연결됨'; tone = 'ok'; }
+  else if (resources.some((r) => r.status === 'loading')) text = 'SDP(회사 보안 서버): 확인 중';
+  return node('p', text, { 'data-field': 'sdp', 'data-tone': tone });
+}
+
+function renderPcDashboard(state, recheck, input) {
   const root = node('section', null, { class: 'student-dashboard', 'data-agent': 'Halo', 'data-status': state.status });
   root.append(node('h3', 'Halo 요약 대시보드 · 내 PC'));
   const button = node('button', state.status === 'loading' ? '확인 중…' : '내 PC 다시 확인', { type: 'button', 'aria-describedby': 'halo-pc-help' });
@@ -922,7 +940,7 @@ function renderPcDashboard(state, recheck) {
     state.keepFocus = false;
     queueMicrotask(() => { if (typeof button.focus === 'function') button.focus(); });
   }
-  root.append(button, node('p', '버튼을 누를 때만 조회합니다. 자동으로 다시 확인하거나 PC 설정을 바꾸지 않습니다.', { class: 'student-mode', id: 'halo-pc-help' }));
+  root.append(button, node('p', '버튼을 누를 때만 조회합니다. 자동으로 다시 확인하거나 PC 설정을 바꾸지 않습니다.', { class: 'student-mode', id: 'halo-pc-help' }), sdpLine(input));
 
   if (state.status === 'idle') {
     root.append(node('p', "아직 확인하지 않았습니다. '내 PC 다시 확인'을 누르세요.", { role: 'status', 'data-state': 'idle' }));
@@ -944,10 +962,12 @@ function renderPcDashboard(state, recheck) {
         : `● 6개 항목 모두 정상`;
     root.append(node('p', headline, { 'data-field': 'verdict', 'data-tone': verdict, role: 'status', 'aria-live': 'polite' }));
     root.append(node('p', `측정 시각: ${pcTime(summary.measuredAt)}${state.status === 'error' ? ' · 이전 결과입니다' : ''}`, { 'data-field': 'measuredAt' }));
+    root.append(node('p', summary.localPc ? '값 종류: 이 PC 실측(local-pc) · 예시 값 아님' : '값 종류: 확인 불가(출처가 이 PC 실측으로 표시되지 않음)', { 'data-field': 'source', 'data-tone': summary.localPc ? 'ok' : 'unknown' }));
     if (!summary.schemaOk) root.append(node('p', '응답 형식(schema)이 예상과 달라 값을 확인 불가로 다뤘습니다.', { 'data-tone': 'unknown' }));
     const cards = node('ul', null, { class: 'student-dashboard-cards' });
     for (const item of summary.items) cards.append(pcCard(item));
     root.append(cards);
+    root.append(node('p', 'Windows 이벤트 건수는 System·Application 기록의 경고·오류 개수일 뿐, 침해나 공격 탐지 결과가 아닙니다. 방화벽·보안 설정은 읽기만 하고 바꾸지 않습니다.', { class: 'student-mode', 'data-field': 'scope' }));
 
     const nexts = summary.items.filter((item) => item.level !== 'ok' && item.next);
     const todo = node('section', null, { 'data-field': 'next' });
@@ -979,7 +999,9 @@ function renderPcDashboard(state, recheck) {
   const rules = node('ul');
   for (const rule of ['CPU 사용률 85% 이상이면 주의', '메모리 사용 90% 이상이면 주의', '디스크 여유 10% 미만이면 주의',
     '방화벽 프로필 중 하나라도 꺼져 있으면 주의', 'Windows 시스템 이벤트에 오류가 1건 이상이면 주의', 'IPv4 주소가 없으면 주의',
-    '값이 없거나 형식이 다르면 정상이 아니라 확인 불가', '변화 그래프와 기록은 이 화면을 연 동안 최근 10번만 보관(저장하지 않음)', '출처: 로컬 서버의 /api/pc/status 읽기 전용 조회. 보안 판정·조치·AI 설명이 아닙니다.']) rules.append(node('li', rule));
+    '값이 없거나 형식이 다르면 정상이 아니라 확인 불가', '변화 그래프와 기록은 이 화면을 연 동안 최근 10번만 보관(저장하지 않음)',
+    'Windows 이벤트: 최근 24시간 System·Application 기록의 경고·오류 개수(제공 서버가 일반 권한으로 조회)',
+    '제공 기능: 로컬 서버의 /api/pc/status 조회와 제공 「내 PC 상태」 카드 · 학생 구현: 판정·요약 카드·다음 할 일·기록·변화 그래프·SDP 구분 표시', '출처: 로컬 서버의 /api/pc/status 읽기 전용 조회. 보안 판정·조치·AI 설명이 아닙니다.']) rules.append(node('li', rule));
   detail.append(rules);
   root.append(detail);
   return root;
@@ -1011,7 +1033,7 @@ export function createStudentView({ api, onChange } = {}) {
   // 16단계 renderStatus는 그대로 두고, 그 위에 요약 대시보드만 덧붙입니다.
   const renderStatusWithDashboard = (input) => {
     const wrap = node('div', null, { class: 'student-status-with-dashboard' });
-    wrap.append(renderPcDashboard(pc, recheck), renderStatus(input));
+    wrap.append(renderPcDashboard(pc, recheck, input), renderStatus(input));
     return wrap;
   };
   return {
