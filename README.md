@@ -3,6 +3,15 @@
 - 운영: https://choi-bujang-secret-vault-livid.vercel.app/
 - 저장소: https://github.com/eunsu7997/choi-bujang-secret-vault
 
+## 4차 방어전 · Halo 보안 Agent (13~22단계, `on-client/`)
+
+- 목적: 직원 본인의 로그인·기기·세션, 업무 앱 접근 판정, 보안 기록·XDR 경보, AI 설명, 조치 상태, 설치 패키지 취약점(OSV)을 사실·해석·미확인을 구분해 보여 주는 PC용 보안 Agent입니다.
+- 구성: 케셰브 시작 틀 0.2.21(`on-client/`, 제공 코드)에 학생이 `on-client/student/extension.mjs`의 표시 함수 8개를 구현했습니다. 브라우저 → 로컬 앱 서버(`on-client/src/server.mjs`, 127.0.0.1:5189) → 접근 제어·XDR(SDP)·AI 게이트웨이(CLCO)·조치 서비스·OSV.
+- 지원 환경: Windows PowerShell, Node.js 22~24(수업 기준 24.19.0, 학생 PC 실제 v24.20.0). 외부 npm 의존성 없음.
+- 실행: `on-client` 폴더에서 `powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1` → `http://127.0.0.1:5189/`.
+- 실행 절차·구성도(Mermaid와 글)·제공/학생 구분·확인/미확인·장애별 복구: [`on-client/docs/STUDENT_RUNBOOK.md`](on-client/docs/STUDENT_RUNBOOK.md)
+- 위 1~12단계 메모 자료실(Vercel) 설명과 Halo 실행은 서로 독립입니다.
+
 ## 보너스 XDR 6종 · 전체 로컬 완성 (2026-11-01)
 
 - [제출 입력란·과제별 파일 안내](xdr/SUBMISSION.md). 공개 저장소와 운영 주소를 입력하고 각 보너스 과제에서 별도로 접수합니다.
