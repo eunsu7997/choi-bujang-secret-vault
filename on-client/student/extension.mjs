@@ -623,6 +623,80 @@ export function renderExplanation({ event, explanation, checkedAt } = {}) {
   return root;
 }
 
+// ---------- 19단계 · 보안 조치 요청 상태와 실제 결과 구분 (Halo) ----------
+// 받는 값: renderAction({ status, event, actionId, target, receipt, observation, message, confirmationExpiresAt?, error? })
+// 이 함수는 상태를 보여 주기만 합니다. 조치 버튼·POST 요청·확인 티켓은 만들지 않으며, 조작은 제공 화면 버튼으로 합니다.
+// AI 제안 → 사람 확인 → 서버 전달(ACK) → 연동 시스템 결과 재조회를 구분하고, ACK를 효과로 보지 않습니다.
+const PROVIDED_BUTTONS = "조작은 제공 화면의 '조치 준비', '대상과 조치를 확인했으며 집행합니다', '연동 시스템 결과만 재조회', '조치 화면 취소' 버튼을 쓰세요. '조치 화면 취소'는 이미 전달된 조치 효과를 되돌리지 않습니다.";
+const ACTION_STATES = {
+  idle: { text: '아직 미실행(idle)', tone: 'idle', guide: '조치 제안은 실행되지 않았습니다. 지금 기록은 연동 시스템이 지원하는 조치가 없어(supportedActions 빈 배열) 조치 준비 버튼이 나오지 않는 것이 정상입니다.' },
+  loading: { text: '조치 준비 또는 결과 조회 중(loading) · 미실행', tone: 'progress', guide: '아직 결과가 없습니다.' },
+  prepared: { text: '준비됨·미실행(prepared)', tone: 'progress', guide: '사람이 대상과 조치를 확인하기 전까지 실행되지 않습니다. 확인 기한 안에 제공 화면에서 직접 확인하세요.' },
+  executing: { text: '서버에 전달 중(executing)', tone: 'progress', guide: '결과가 아직 확인되지 않았습니다. 완료 아님.' },
+  pending: { text: '서버 접수·처리 중(pending)', tone: 'progress', guide: '서버가 받았다는 응답(ACK)일 뿐 효과가 확인된 것이 아닙니다. 완료 아님. 연동 시스템 결과만 재조회해 확인하세요.' },
+  succeeded: { text: '효과 확인(succeeded)', tone: 'ok', guide: '연동 시스템이 효과를 관측했습니다.' },
+  denied: { text: '거절(denied)', tone: 'blocked', guide: '연동 시스템이 조치를 거절했습니다.' },
+  failed: { text: '실패(failed)', tone: 'blocked', guide: '연동 시스템이 조치를 처리하지 못했습니다.' },
+  unknown: { text: '결과 불명(unknown)', tone: 'unknown', guide: '성공으로도 효과 없음으로도 판단하지 마세요. 다시 집행하지 말고 연동 시스템 결과만 재조회하세요.' },
+  expired: { text: '확인 기한 지남(expired)', tone: 'unknown', guide: '확인 기한이 지나 집행할 수 없습니다. 제공 화면에서 다시 준비하세요.' },
+  error: { text: '요청 처리 안 됨(error)', tone: 'blocked', guide: '요청이 처리되지 않았습니다. 상태를 확인한 뒤 제공 화면 버튼을 직접 누르세요.' },
+};
+
+export function renderAction({ status, event, actionId, target, receipt, observation, message, confirmationExpiresAt, error } = {}) {
+  const eventId = typeof event?.id === 'string' && event.id ? event.id : null;
+  const requestId = typeof receipt?.requestId === 'string' && receipt.requestId ? receipt.requestId : null;
+  let code = Object.hasOwn(ACTION_STATES, status) ? status : 'unknown';
+  const reasons = [];
+  // 현재 의도(사건·조치)와 다른 영수증은 이 화면의 결과로 쓰지 않습니다.
+  const mismatch = receipt && ((receipt.eventId && eventId && receipt.eventId !== eventId) || (receipt.actionId && actionId && receipt.actionId !== actionId));
+  if (mismatch) { code = 'unknown'; reasons.push('영수증이 현재 사건·조치와 맞지 않습니다'); }
+  // 효과는 succeeded이면서 observation.effectApplied === true일 때만 인정합니다.
+  if (code === 'succeeded' && observation?.effectApplied !== true) { code = 'unknown'; reasons.push('연동 시스템 효과 관측(effectApplied: true)이 없습니다'); }
+  if (receipt?.superseded === true) { code = 'unknown'; reasons.push('더 새로운 요청으로 대체됐습니다(superseded)'); }
+
+  const attrs = { class: 'student-action', 'data-agent': 'Halo', 'data-status': code };
+  if (eventId && !mismatch) attrs['data-student-action-event'] = eventId;
+  if (eventId && requestId && !mismatch) attrs['data-student-action-request'] = requestId;
+  const root = node('section', null, attrs);
+  root.append(node('h3', '보안 조치 상태'));
+
+  const state = ACTION_STATES[code];
+  root.append(node('p', state.text, { role: code === 'error' || code === 'unknown' ? 'alert' : 'status', 'data-tone': state.tone, 'data-state': code }));
+  if (code !== status && typeof status === 'string') root.append(node('p', `서버 상태 값: ${status} → 결과 불명으로 처리했습니다 (${reasons.join(', ') || '알 수 없는 상태'})`));
+  root.append(node('p', state.guide));
+
+  // 받은 범위의 식별값만 글자로 적습니다. 확인 번호 같은 값은 입력에 없으므로 만들거나 저장하지 않습니다.
+  const facts = node('dl', null, { 'data-field': 'intent' });
+  if (eventId) pair(facts, '사건 ID', eventId);
+  const evidenceIds = Array.isArray(event?.evidence) ? event.evidence.map((e) => e?.id).filter((id) => typeof id === 'string') : [];
+  if (evidenceIds.length) pair(facts, '근거 ID', evidenceIds.join(', '));
+  if (typeof actionId === 'string' && actionId) pair(facts, '조치(actionId)', actionId);
+  if (target && typeof target.id === 'string') pair(facts, '실제 대상', `${target.id} (generation ${text(String(target.generation ?? ''))})`);
+  if (code === 'prepared' || confirmationExpiresAt) pair(facts, '확인 기한', text(confirmationExpiresAt));
+  if (requestId) pair(facts, 'requestId', requestId);
+  if (typeof receipt?.receiptId === 'string') pair(facts, 'receiptId', receipt.receiptId);
+  if (Number.isSafeInteger(receipt?.version)) pair(facts, 'version', String(receipt.version));
+  // 같은 요청을 다시 보내도 서버가 중복 실행하지 않고 앞선 결과를 돌려준 경우를 구분합니다.
+  if (typeof receipt?.replayed === 'boolean') pair(facts, '재전달 응답(replayed)', receipt.replayed ? '예 · 앞선 요청의 결과입니다(중복 실행 아님)' : '아니요');
+  if (code === 'succeeded') {
+    pair(facts, '효과', 'effectApplied: true');
+    pair(facts, '관측 시각', text(observation?.observedAt));
+  } else if (observation && typeof observation.effectApplied === 'boolean') {
+    pair(facts, '관측', `effectApplied: ${observation.effectApplied} · ${text(observation.observedAt)}`);
+  }
+  if (facts.children.length) root.append(facts);
+
+  if (code === 'error' || code === 'denied' || code === 'failed' || code === 'expired') {
+    const safeCode = typeof error?.code === 'string' && SAFE_CODE.test(error.code) ? error.code : null;
+    const detail = typeof error?.message === 'string' && error.message ? error.message : (typeof message === 'string' && message ? message : '안내 문구 없음');
+    root.append(node('p', `${safeCode ? `${safeCode}: ` : ''}${detail}`, { 'data-state': code }));
+  } else if (typeof message === 'string' && message && code !== 'succeeded') {
+    root.append(node('p', `제공 화면 안내: ${message}`));
+  }
+  root.append(node('p', PROVIDED_BUTTONS));
+  return root;
+}
+
 export function createStudentView() {
   return {
     renderIdentity,
@@ -632,6 +706,6 @@ export function createStudentView() {
     renderVulnerabilities() { return '학생 구현 대기: 정확한 설치 버전·OSV 출처·조회 시각·부분 결과·조회 실패를 구분하세요.'; },
     renderAiConnection,
     renderExplanation,
-    renderAction() { return '학생 구현 대기: 현재 사건·조치·실제 대상·사람 확인·ACK와 원천 효과·unknown을 구분하세요.'; },
+    renderAction,
   };
 }
